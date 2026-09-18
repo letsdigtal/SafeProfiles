@@ -12,6 +12,7 @@ Security model (written to AVOID the flaws found in the audited app):
     ones YOU trigger (proxy test / free-proxy fetch).
 """
 import json
+import os
 import secrets
 import socket
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -30,19 +31,52 @@ from .user_agents import list_presets
 class AppServer:
     def __init__(self, data_dir: Path | None = None, port: int = 0):
         self.store = ProfileStore(data_dir)
-        self.token = secrets.token_urlsafe(24)
+        # v1.2.2: the token and port are now STABLE per installation.
+        # Restarting the app must not break already-open dashboard tabs.
+        self.token = self._persistent_token()
         self.httpd: ThreadingHTTPServer | None = None
         self.port = port
 
+    def _persistent_token(self) -> str:
+        f = self.store.data_dir / ".app_token"
+        try:
+            t = f.read_text(encoding="ascii").strip()
+            if len(t) >= 20:
+                return t
+        except (OSError, UnicodeDecodeError):
+            pass
+        t = secrets.token_urlsafe(24)
+        try:
+            f.write_text(t, encoding="ascii")
+            try:
+                os.chmod(f, 0o600)
+            except OSError:
+                pass
+        except OSError:
+            pass
+        return t
+
     def start(self):
         handler = self._make_handler()
-        # Try a small range so the app "just opens" instead of port errors.
-        candidates = [self.port] if self.port else list(range(17500, 17520))
+        # v1.2.2: prefer the port used last time so open tabs keep working,
+        # then fall back to a small range so the app "just opens" anyway.
+        saved = None
+        if not self.port:
+            try:
+                saved = int((self.store.data_dir / ".port").read_text().strip())
+            except (OSError, ValueError):
+                saved = None
+        candidates = [self.port] if self.port else (
+            ([saved] if saved else []) + [p for p in range(17500, 17520) if p != saved])
         last_err: Exception | None = None
         for p in candidates:
             try:
                 self.httpd = ThreadingHTTPServer(("127.0.0.1", p), handler)
                 self.port = self.httpd.server_address[1]
+                try:
+                    (self.store.data_dir / ".port").write_text(str(self.port))
+                except OSError:
+                    pass
                 return self
             except OSError as e:
                 last_err = e

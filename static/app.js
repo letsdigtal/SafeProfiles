@@ -4,33 +4,36 @@ let PRESETS = [], BROWSERS = [], POOL = [], EDIT_ID = null;
 
 function ssGet(k) { try { return sessionStorage.getItem(k); } catch (e) { return null; } }
 function ssSet(k, v) { try { sessionStorage.setItem(k, v); } catch (e) {} }
-function pageLost(msg) {
-  // The app restarted (or closed) while this page stayed open - its security
-  // key no longer matches. Reload once automatically; if that does not help,
-  // show clear instructions instead of cryptic "wrong app token" errors.
-  toast(msg);
-  const last = +(ssGet('sp_reload') || 0);
-  if (Date.now() - last > 30000 && !window.__SP_RELOADING) {
-    window.__SP_RELOADING = true;
-    ssSet('sp_reload', String(Date.now()));
-    setTimeout(() => location.reload(), 900);
-    return;
+function pageLost(msg, noReload) {
+  // One silent reconnect attempt per page load. The full overlay is only
+  // shown when reloading already happened and did not fix it (or the app
+  // is closed) - a reconnect must never look like a crash.
+  if (!window.__SP_RELOADING) {
+    if (!noReload && ssGet('sp_retried') !== '1') {
+      window.__SP_RELOADING = true;
+      ssSet('sp_retried', '1');
+      toast('Reconnecting to SafeProfiles…');
+      setTimeout(() => location.reload(), 800);
+      return;
+    }
+    toast(msg);
+    const o = document.getElementById('lostOverlay');
+    if (o) { o.classList.remove('hidden'); document.getElementById('lostMsg').textContent = msg; }
   }
-  const o = document.getElementById('lostOverlay');
-  if (o) { o.classList.remove('hidden'); document.getElementById('lostMsg').textContent = msg; }
 }
 async function api(path, opts = {}) {
   opts.headers = Object.assign({ 'X-App-Token': TOKEN, 'Content-Type': 'application/json' }, opts.headers || {});
   let r;
   try { r = await fetch(path, opts); }
   catch (e) {
-    pageLost('Cannot reach the SafeProfiles app - it may be closed.');
+    pageLost('The SafeProfiles app is not running (connection refused).', true);
     return { ok: false, error: 'SafeProfiles app is not running. Start SafeProfiles.exe, then reload this page.' };
   }
   const data = await r.json().catch(() => ({ ok: false, error: 'Bad response' }));
+  if (r.ok) ssSet('sp_retried', '0');
   if (!r.ok && data.ok === undefined) data.ok = false;
   if (r.status === 401 && data.code === 'bad_app_token')
-    pageLost('This page lost its key (the app restarted). Reloading automatically...');
+    pageLost('This page is from an older app run.');
   return data;
 }
 function toast(msg) {
