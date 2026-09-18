@@ -84,6 +84,12 @@ function fillPool(sel, val) {
     `<option value="${i}">${esc(p.protocol)}://${esc(p.host)}:${esc(p.port)} · ${esc(p.country || '?')} · ${esc(p.latencyMs ?? '?')}ms</option>`).join('');
   if (val !== undefined && val !== '') sel.value = val;
 }
+function fillGH(sel, val) {
+  sel.innerHTML = GH.length
+    ? GH.map(a => `<option value="${esc(a.id)}">${esc(a.label)} @${esc(a.username)} — ${esc(a.status)}${a.endpoint ? '' : ' (no endpoint yet)'}</option>`).join('')
+    : '<option value="">— none added yet (Proxies tab) —</option>';
+  if (val) sel.value = val;
+}
 
 async function openModal(p) {
   EDIT_ID = p ? p.id : null;
@@ -104,6 +110,7 @@ async function openModal(p) {
   document.getElementById('fTZ').value = p?.timezone || '';
   document.getElementById('fURL').value = p?.startUrl || 'about:blank';
   document.querySelectorAll('input[name=pmode]').forEach(r => r.checked = (r.value === (p?.proxyMode || 'none')));
+  fillGH(document.getElementById('fGH'), p?.ghAccountId);
   const cx = p?.customProxy || {};
   document.getElementById('fProto').value = cx.protocol || 'http';
   document.getElementById('fHost').value = cx.host || '';
@@ -120,7 +127,9 @@ function updateProxyBoxes() {
   const mode = document.querySelector('input[name=pmode]:checked').value;
   document.getElementById('customBox').classList.toggle('hidden', mode !== 'custom');
   document.getElementById('poolBox').classList.toggle('hidden', mode !== 'pool');
+  document.getElementById('ghBox').classList.toggle('hidden', mode !== 'github');
   if (mode === 'pool') fillPool(document.getElementById('fPool'));
+  if (mode === 'github') fillGH(document.getElementById('fGH'));
 }
 document.querySelectorAll('input[name=pmode]').forEach(r => r.addEventListener('change', updateProxyBoxes));
 document.getElementById('fPreset').addEventListener('change', (e) => {
@@ -163,6 +172,11 @@ document.getElementById('btnSave').addEventListener('click', async () => {
     const i = document.getElementById('fPool').value;
     if (i === '') return toast('Pick a pool proxy first (or fetch in Proxies tab).');
     body.poolProxy = POOL[+i];
+  }
+  if (mode === 'github') {
+    const g = document.getElementById('fGH').value;
+    if (!g) return toast('Pick a GitHub tunnel account (add one in the Proxies tab first).');
+    body.ghAccountId = g;
   }
   const url = EDIT_ID ? '/api/profiles/' + EDIT_ID : '/api/profiles';
   const d = await api(url, { method: EDIT_ID ? 'PUT' : 'POST', body: JSON.stringify(body) });
@@ -238,6 +252,63 @@ document.getElementById('btnPoolTest').addEventListener('click', async (e) => {
 });
 document.getElementById('btnPoolClear').addEventListener('click', async () => {
   await api('/api/pool/clear', { method: 'POST' }); loadPool();
+});
+
+// ---- GitHub tunnel accounts ----
+let GH = [];
+async function loadGH() {
+  const d = await api('/api/gh/accounts');
+  GH = d.ok ? (d.accounts || []) : [];
+  document.getElementById('ghList').innerHTML = GH.length
+    ? GH.map(renderGH).join('')
+    : '<p class="muted">No GitHub accounts added yet. Add one above — one throwaway account per browser profile.</p>';
+}
+function renderGH(a) {
+  const ep = a.endpoint ? `socks5://${esc(a.endpoint)}` : 'no endpoint yet';
+  const note = a.statusNote ? ` <span class="muted small">${esc(a.statusNote)}</span>` : '';
+  const upd = a.endpointUpdated ? ` <span class="muted small">updated ${esc(a.endpointUpdated)}</span>` : '';
+  return `<div class="ghrow">
+    <div><b>${esc(a.label)}</b> <span class="muted">@${esc(a.username)}</span>
+      <span class="badge ${a.status === 'active' ? 'run' : ''}">${esc(a.status || '?')}</span>${note}
+      <br><code>${ep}</code>${upd} <span class="muted small">user: ${esc(a.socksUser || '')}</span></div>
+    <div class="row">
+      <button class="btn" onclick="ghAct('${a.id}','start')">${a.status === 'active' ? 'Restart' : 'Start'}</button>
+      <button class="btn" onclick="ghAct('${a.id}','refresh')">Refresh</button>
+      <button class="btn" onclick="ghAct('${a.id}','test')">Test</button>
+      <button class="btn" onclick="ghAct('${a.id}','stop')">Stop</button>
+      <button class="btn danger" onclick="ghRemove('${a.id}')">Remove</button>
+    </div></div>`;
+}
+window.ghAct = async (id, action) => {
+  toast(action + '…');
+  const d = await api(`/api/gh/accounts/${id}/${action}`, { method: 'POST' });
+  if (!d.ok) toast('Error: ' + d.error);
+  else if (action === 'test') toast(d.success ? `Proxy OK ✓ IP ${d.ip} (${d.country || '?'}) ${d.latencyMs}ms` : 'Proxy test FAILED: ' + d.error);
+  else toast('Done — ' + ((d.account || {}).status || ''));
+  loadGH();
+  if (action === 'start') { let n = 0; const p = () => { if (n++ < 8) setTimeout(() => { loadGH(); p(); }, 15000); }; p(); }
+};
+window.ghRemove = async (id) => {
+  const wipe = confirm('Also DELETE the tunnel repo from GitHub? OK = delete repo too, Cancel = keep repo.');
+  const d = await api(`/api/gh/accounts/${id}/remove`, { method: 'POST', body: JSON.stringify({ wipe }) });
+  toast(d.ok ? ('Removed' + (d.note ? ' — ' + d.note : '')) : 'Error: ' + d.error);
+  loadGH();
+};
+document.getElementById('btnGhAdd').addEventListener('click', async (e) => {
+  const label = document.getElementById('ghLabel').value.trim();
+  const token = document.getElementById('ghToken').value.trim();
+  if (!document.getElementById('ghConfirm').checked) return toast('Tick the risk checkbox first.');
+  if (!token) return toast('Paste the GitHub token first.');
+  const btn = e.target; btn.disabled = true;
+  toast('Adding account: verifying token, creating repo + workflow… (~30s)');
+  const d = await api('/api/gh/accounts', { method: 'POST', body: JSON.stringify({ label, token }) });
+  btn.disabled = false;
+  if (!d.ok) return toast('Error: ' + d.error);
+  document.getElementById('ghToken').value = '';
+  document.getElementById('ghLabel').value = '';
+  toast('Added ✓ tunnel starting — press Refresh in ~1-2 min');
+  loadGH();
+  let n = 0; const p = () => { if (n++ < 8) setTimeout(() => { loadGH(); p(); }, 15000); }; p();
 });
 
 // ---- browsers ----

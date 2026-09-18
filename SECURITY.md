@@ -18,3 +18,22 @@
 
 Open a GitHub issue titled `[SECURITY]` or contact the repo owner privately.
 Please do not open public issues with exploit details before a fix exists.
+
+## Optional: GitHub tunnel proxies (added in v1.1)
+
+The dashboard can turn the user's own throwaway GitHub accounts into free
+SOCKS5 proxies (Proxies tab). Design guarantees:
+
+- The GitHub Personal Access Token is stored **encrypted** in the local data
+  folder and is sent only to `api.github.com` over HTTPS — **never uploaded**
+  anywhere else. The runner workflow only receives GitHub's own short-lived
+  `GITHUB_TOKEN` scoped to the tunnel repo.
+- The SOCKS5 endpoint requires a randomly generated username/password stored
+  as encrypted GitHub Actions secrets (libsodium sealed box) — the tunnel is
+  never an open proxy.
+- Every file pushed to the user's GitHub account is plain text, generated from
+  readable source in `app/gh_proxy.py` (`tunnel.yml` + `run_tunnel.sh`).
+
+Clearly warned trade-offs (shown in the UI): the practice violates GitHub's
+Terms of Service (ban risk — throwaway accounts only) and traffic transits
+pinggy.io. The feature is strictly opt-in; the app works fully without it.

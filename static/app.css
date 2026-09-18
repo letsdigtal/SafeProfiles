@@ -51,3 +51,9 @@ legend { padding:0 6px; color:var(--mut); font-size:13px; }
 .sheet h3 { margin-top:0; } .form label { margin:8px 0; }
 .toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:#0d1730;
   border:1px solid var(--pri); border-radius:10px; padding:10px 18px; z-index:20; }
+
+/* GitHub tunnel accounts */
+.ghrow { display: flex; justify-content: space-between; align-items: center; gap: 12px;
+         padding: 10px 0; border-bottom: 1px solid rgba(148, 163, 184, .15); flex-wrap: wrap; }
+.ghrow:last-child { border-bottom: none; }
+.ghrow code { color: #7dd3fc; }

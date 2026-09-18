@@ -66,6 +66,21 @@
       <table class="tbl"><thead><tr><th>Proxy</th><th>Country</th><th>City</th><th>Ping</th><th></th></tr></thead>
       <tbody id="poolBody"></tbody></table>
     </div>
+    <div class="card">
+      <h3>GitHub tunnel proxies (free &mdash; your own accounts)</h3>
+      <p class="muted">Turns <b>your own GitHub accounts</b> into free SOCKS5 proxies. One throwaway account = one proxy = one browser profile. Internet needed only while starting/testing.</p>
+      <div class="warn">&#9888; <b>Honest warning:</b> running proxies on GitHub Actions breaks GitHub's Terms of Service &mdash; accounts can get banned. Use throwaway accounts only (never your main one). Traffic passes through pinggy.io. GitHub IPs are datacenter IPs, not residential.</div>
+      <div class="row">
+        <label>Label <input id="ghLabel" placeholder="e.g. Profile 1 account"></label>
+        <label>Token (classic PAT) <input id="ghToken" type="password" placeholder="ghp_&hellip; with repo + workflow scopes" style="flex:1; min-width:220px"></label>
+      </div>
+      <div class="row">
+        <label class="chk"><input id="ghConfirm" type="checkbox"> I understand the ban risk &amp; use a throwaway account</label>
+        <button id="btnGhAdd" class="btn primary">Add account &amp; start tunnel</button>
+      </div>
+      <div id="ghList" class="list"></div>
+      <p class="muted small">Token steps: on the GitHub account &rarr; Settings &rarr; Developer settings &rarr; Personal access tokens &rarr; Tokens (classic) &rarr; Generate new token &rarr; tick <b>repo</b> + <b>workflow</b> &rarr; paste above. Full guide + warnings in the README.</p>
+    </div>
   </section>
 
   <!-- BROWSERS -->
@@ -90,7 +105,7 @@
       <ol class="help">
         <li>Create one profile per YouTube channel / Facebook page. Pick Desktop or Mobile fingerprint.</li>
         <li>Press <b>Launch</b>, log in once inside that profile window. Sessions stay separated.</li>
-        <li>Optional: set a custom proxy per profile (tested above), or leave direct for maximum safety.</li>
+        <li>Optional proxy per profile: custom (tested above), free pool, or a GitHub tunnel from your own throwaway accounts (Proxies tab). Direct connection is safest for important logins.</li>
         <li>For posting/uploading, prefer the <b>official APIs</b> — see <code>automation/README.md</code>.</li>
       </ol>
       <h3>Honest note about “undetectable”</h3>
@@ -131,6 +146,7 @@
           <label><input type="radio" name="pmode" value="none" checked> None (direct — safest for logins)</label>
           <label><input type="radio" name="pmode" value="custom"> Custom</label>
           <label><input type="radio" name="pmode" value="pool"> From free pool</label>
+          <label><input type="radio" name="pmode" value="github"> GitHub tunnel</label>
         </div>
         <div id="customBox" class="hidden">
           <label>Paste proxy (any format) <input id="fPxRaw" placeholder="ip:port:user:pass"></label>
@@ -149,6 +165,10 @@
         </div>
         <div id="poolBox" class="hidden">
           <label>Pool proxy <select id="fPool"><option value="">— load pool in Proxies tab —</option></select></label>
+        </div>
+        <div id="ghBox" class="hidden">
+          <label>GitHub tunnel account <select id="fGH"></select></label>
+          <p class="muted small">Tip: one GitHub account per profile = a different IP per profile. Add accounts in the Proxies tab.</p>
         </div>
       </fieldset>
       <label id="seedRow" class="chk hidden"><input id="fSeed" type="checkbox"> Generate new fingerprint seed (changes canvas/audio noise)</label>

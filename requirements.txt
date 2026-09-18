@@ -1,2 +1,2 @@
-# Runtime deps for the SafeProfiles app (kept minimal on purpose).
-cryptography>=41
+cryptography
+pynacl

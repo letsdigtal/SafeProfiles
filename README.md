@@ -53,9 +53,10 @@ git push -u origin main
 | **Fingerprint** | Per-profile preset (Win/Mac desktop, iPhone, Android): user-agent, viewport, screen, GPU, cores, locale, timezone + seeded canvas/audio noise. Full source in `extension/` |
 | **Custom proxies** | Paste any format (`ip:port`, `ip:port:user:pass`, `user:pass@ip:port`, `socks5://…`), live-tested with country/city/ping/timezone. Passwords encrypted on disk |
 | **Free proxy pool** | Fetch public lists → auto-test → keep working ones → assign to any profile. **$0 forever** |
+| **GitHub tunnels** | Optional: your own throwaway GitHub accounts become free SOCKS5 proxies (one account per profile). Token stored **encrypted**, **never uploaded**; tunnel is password-protected |
 | **Anti-leak flags** | WebRTC IP-leak blocked, `AutomationControlled` blink feature disabled, no automation banners |
 | **Automation** | Official-API uploaders/posters (YouTube Data API, FB Graph API) + careful browser fallbacks where the human clicks Publish. See `automation/` |
-| **Safety design** | No telemetry, no auto-update, no remote config, no GitHub token needed, local API token-locked, **never** `--remote-allow-origins=*` |
+| **Safety design** | No telemetry, no auto-update, no remote config; local API token-locked; **never** `--remote-allow-origins=*`; GitHub-token feature (optional) keeps your PAT encrypted and local |
 
 ## 🔌 Proxies without money — how to do it right
 
@@ -70,14 +71,43 @@ git push -u origin main
 4. Later, any cheap VPS + SSH (`ssh -D 1080 user@vps`) gives you your own
    private SOCKS5 at `127.0.0.1:1080` — paste it as a custom proxy.
 
-### Why is there no "login with GitHub token for free residential proxies"?
+### 🆓 GitHub tunnel proxies (optional — your own accounts, by popular request)
 
-Because that trick (used by the closed-source app this replaces) spends **your**
-GitHub account: it runs proxy servers on GitHub Actions with **your** token and
-tunnels traffic through a free third-party relay. That gets GitHub accounts
-flagged/banned, leaks your token in plaintext, and lets strangers observe your
-traffic. SafeProfiles will never do that — the free pool above costs nothing
-and risks nothing.
+The closed-source app this replaces had a "free proxy with GitHub token" trick.
+SafeProfiles includes a **safe, fully readable version** of it.
+
+**One throwaway GitHub account = one free SOCKS5 proxy = one browser profile.**
+
+1. Create a **separate** GitHub account for the profile (verify its email —
+   Actions requires it). Do NOT use your main account.
+2. On that account: *Settings → Developer settings → Personal access tokens →
+   Tokens (classic) → Generate new token* → tick **repo** + **workflow**.
+3. SafeProfiles → Proxies tab → *GitHub tunnel proxies* → type a label, paste
+   the token → **Add account & start tunnel** (needs internet, ~30 seconds).
+4. The app creates a repo `safeprofiles-tunnel` in that account containing two
+   plain-text files (`.github/workflows/tunnel.yml` + `run_tunnel.sh`) — you can
+   read every line on GitHub. The workflow runs `microsocks` (a tiny open-source
+   SOCKS5 server) on GitHub's runner and exposes it through a **pinggy.io** TCP
+   tunnel. The public address is committed to `endpoint.json`; press
+   **Refresh** (≈1–2 min) then **Test**.
+5. Edit profile → Proxy → **GitHub tunnel** → pick the account → Launch. 🎉
+
+Safer than the original app's version:
+
+- your token is stored **encrypted** locally and is **never uploaded anywhere**
+  (the runner only receives GitHub's own short-lived token),
+- the SOCKS proxy **requires a random username/password** (theirs was an open
+  proxy anyone could find and abuse),
+- nothing is base64-obfuscated — every pushed file is readable.
+
+⚠️ **Honest warnings:** running proxies on GitHub Actions **violates GitHub's
+Terms of Service** — accounts can get **banned**, so use throwaway accounts you
+can afford to lose. Traffic passes through pinggy.io (third party). GitHub
+datacenter IPs are *not* residential — expect occasional "unusual login
+location" emails from Facebook/Google. Each runner lives ≤ ~5.5 h and a cron
+re-starts it automatically (brief gaps possible); if a tunnel dies, press
+**Start** again. For valuable accounts, a direct connection or a real proxy is
+still the better choice.
 
 ## 🕵️ Will Facebook/YouTube detect it?
 
@@ -102,6 +132,9 @@ spam, fake engagement, CAPTCHA-solving services, 50 accounts on one IP. Don't.
 | Fingerprint extension missing in launched window | Newer branded Chrome may ignore `--load-extension`. In the launched window: `chrome://extensions` → Developer mode ON → *Load unpacked* → `…\SafeProfiles\browsers\<profile>\fingerprint_ext` (once; it sticks to that profile). Or use unbranded Chromium |
 | Proxy auth popup appears | The per-profile auth extension should handle it; if it pops up, re-save the proxy password in Edit profile |
 | Free proxies all fail | Normal — public lists decay hourly. Fetch fresh + test again, or browse direct |
+| Tunnel stuck on "starting" | Open that account's repo → Actions tab on github.com and read the run's error; verify the account's email (Actions needs it); press Start again |
+| "Token scopes missing" | Create a CLASSIC token and tick both **repo** and **workflow** scopes |
+| Tunnel worked, then died | Runners end after ~5.5 h (cron auto-restarts, small gaps). Press Start, then Refresh |
 
 ## 📁 Project layout
 

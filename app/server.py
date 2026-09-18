@@ -21,6 +21,7 @@ from urllib.parse import urlparse, parse_qs
 from . import __version__
 from .browser_runner import (find_browsers, is_running, launch, running_pids, stop)
 from .free_proxies import fetch_lists, test_many
+from .gh_proxy import GitHubError
 from .profiles import ProfileStore, resource_path
 from .proxy_tools import parse_proxy_string, test_proxy
 from .user_agents import list_presets
@@ -247,6 +248,36 @@ class AppServer:
                 if path == "/api/pool/clear" and method == "POST":
                     store.save_pool([])
                     return self._send_json({"ok": True})
+
+                # ---- GitHub tunnel accounts (optional; user's own throwaway accounts) ----
+                if path == "/api/gh/accounts" and method == "GET":
+                    return self._send_json({"ok": True, "accounts": store.gh.list(refresh=True)})
+                if path == "/api/gh/accounts" and method == "POST":
+                    body = self._read_json()
+                    try:
+                        acc = store.gh.add(body.get("label", ""), body.get("token", ""))
+                    except GitHubError as e:
+                        return self._send_json({"ok": False, "error": str(e)}, 400)
+                    return self._send_json({"ok": True, "account": acc})
+                if (len(parts) >= 5 and parts[0] == "api" and parts[1] == "gh"
+                        and parts[2] == "accounts"):
+                    aid, action = parts[3], parts[4]
+                    try:
+                        if action == "start" and method == "POST":
+                            return self._send_json({"ok": True, "account": store.gh.start(aid)})
+                        if action == "stop" and method == "POST":
+                            return self._send_json({"ok": True, "account": store.gh.stop(aid)})
+                        if action == "refresh" and method == "POST":
+                            return self._send_json({"ok": True, "account": store.gh.refresh(aid)})
+                        if action == "test" and method == "POST":
+                            return self._send_json({"ok": True, **store.gh.test(aid)})
+                        if action == "remove" and method == "POST":
+                            body = self._read_json()
+                            return self._send_json(store.gh.remove(aid, wipe=bool(body.get("wipe"))))
+                    except GitHubError as e:
+                        return self._send_json({"ok": False, "error": str(e)}, 400)
+                    except KeyError:
+                        return self._send_json({"ok": False, "error": "Account not found."}, 404)
 
                 return self._send_json({"ok": False, "error": "Endpoint not found."}, 404)
 

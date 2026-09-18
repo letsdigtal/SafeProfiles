@@ -31,6 +31,8 @@ class ProfileStore:
         self.db_file = self.data_dir / "profiles.json"
         self.pool_file = self.data_dir / "proxy_pool.json"
         self.secrets = SecretsStore(self.data_dir)
+        from .gh_proxy import GhTunnels  # optional GitHub tunnel accounts
+        self.gh = GhTunnels(self)
         self._profiles: dict = {}
         self.load()
         if not self._profiles:
@@ -111,7 +113,8 @@ class ProfileStore:
             "viewport": fields.get("viewport") or dict(preset["viewport"]),
             "locale": fields.get("locale", preset.get("locale", "en-US")),
             "timezone": fields.get("timezone", ""),
-            "proxyMode": fields.get("proxyMode", "none"),  # none|custom|pool
+            "proxyMode": fields.get("proxyMode", "none"),  # none|custom|pool|github
+            "ghAccountId": fields.get("ghAccountId", ""),
             "customProxy": self._store_proxy_secret(fields.get("customProxy") or {}),
             "poolProxy": fields.get("poolProxy") or {},
             "startUrl": fields.get("startUrl", "about:blank"),
@@ -129,7 +132,7 @@ class ProfileStore:
             return None
         for key in ("name", "color", "notes", "browser", "uaPreset", "userAgent",
                     "isMobile", "viewport", "locale", "timezone", "proxyMode",
-                    "poolProxy", "startUrl"):
+                    "ghAccountId", "poolProxy", "startUrl"):
             if key in fields and fields[key] is not None:
                 p[key] = fields[key]
         if "customProxy" in fields and fields["customProxy"] is not None:

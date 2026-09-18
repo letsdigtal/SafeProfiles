@@ -160,6 +160,22 @@ def build_command(profile: dict, data_dir: Path, store) -> tuple[list, str]:
         proxy["password"] = store.proxy_password(profile)
     elif mode == "pool":
         proxy = dict(profile.get("poolProxy") or {})
+    elif mode == "github":
+        gh = getattr(store, "gh", None)
+        try:
+            acc = gh.get(profile.get("ghAccountId", "")) if gh else None
+        except KeyError:
+            acc = None
+        if not acc:
+            raise RuntimeError("No GitHub tunnel account selected. "
+                               "Edit profile -> Proxy -> GitHub tunnel.")
+        if not acc.get("endpoint") or ":" not in str(acc.get("endpoint")):
+            raise RuntimeError("Tunnel not ready yet. Proxies tab -> GitHub Tunnels: "
+                               "press Start, wait 1-2 minutes, then Refresh.")
+        gh_host, gh_port = str(acc["endpoint"]).rsplit(":", 1)
+        proxy = {"protocol": "socks5", "host": gh_host, "port": gh_port,
+                 "username": acc.get("socksUser", ""),
+                 "password": gh.socks_password_by_id(acc["id"])}
     if proxy.get("host") and proxy.get("port"):
         proxy_args.append(f"--proxy-server={format_for_chrome(proxy)}")
         if proxy.get("username"):
