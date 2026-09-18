@@ -173,6 +173,13 @@ class AppServer:
 
                 if not path.startswith("/api/"):
                     return self._send_json({"ok": False, "error": "Endpoint not found."}, 404)
+                # Same-origin key bootstrap. Served WITHOUT the token on purpose:
+                # no CORS header is ever sent, so only this app's own dashboard
+                # page can read the response (browser same-origin policy blocks
+                # every other website). This lets an open tab repair itself.
+                if path == "/api/bootstrap" and method == "GET":
+                    return self._send_json({"ok": True, "token": token,
+                                            "version": __version__})
                 if not self._authed(qs):
                     return self._send_json({"ok": False, "error": "Missing or wrong app token.",
                                         "code": "bad_app_token"}, 401)

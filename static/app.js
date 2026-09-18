@@ -1,39 +1,38 @@
 /* SafeProfiles dashboard logic. Same-origin only; token required for all API calls. */
-const TOKEN = window.__APP_TOKEN__;
+let TOKEN = window.__APP_TOKEN__ || '';
 let PRESETS = [], BROWSERS = [], POOL = [], EDIT_ID = null;
 
-function ssGet(k) { try { return sessionStorage.getItem(k); } catch (e) { return null; } }
-function ssSet(k, v) { try { sessionStorage.setItem(k, v); } catch (e) {} }
-function pageLost(msg, noReload) {
-  // One silent reconnect attempt per page load. The full overlay is only
-  // shown when reloading already happened and did not fix it (or the app
-  // is closed) - a reconnect must never look like a crash.
-  if (!window.__SP_RELOADING) {
-    if (!noReload && ssGet('sp_retried') !== '1') {
-      window.__SP_RELOADING = true;
-      ssSet('sp_retried', '1');
-      toast('Reconnecting to SafeProfiles…');
-      setTimeout(() => location.reload(), 800);
-      return;
-    }
-    toast(msg);
-    const o = document.getElementById('lostOverlay');
-    if (o) { o.classList.remove('hidden'); document.getElementById('lostMsg').textContent = msg; }
-  }
+async function refreshToken() {
+  // Ask the app for its current key and adopt it. This endpoint is only
+  // readable by this page (same-origin policy protects it), so a stale
+  // tab can always repair itself - no reload needed.
+  try {
+    const r = await fetch('/api/bootstrap');
+    const d = await r.json();
+    if (d && d.ok && d.token) { TOKEN = d.token; return true; }
+  } catch (e) {}
+  return false;
+}
+function pageLost(msg) {
+  toast(msg);
+  const o = document.getElementById('lostOverlay');
+  if (o) { o.classList.remove('hidden'); document.getElementById('lostMsg').textContent = msg; }
 }
 async function api(path, opts = {}) {
   opts.headers = Object.assign({ 'X-App-Token': TOKEN, 'Content-Type': 'application/json' }, opts.headers || {});
   let r;
   try { r = await fetch(path, opts); }
   catch (e) {
-    pageLost('The SafeProfiles app is not running (connection refused).', true);
-    return { ok: false, error: 'SafeProfiles app is not running. Start SafeProfiles.exe, then reload this page.' };
+    pageLost('Cannot reach the SafeProfiles app - it looks closed.');
+    return { ok: false, error: 'SafeProfiles app is not running. Start SafeProfiles.exe, then press Reload page.' };
   }
   const data = await r.json().catch(() => ({ ok: false, error: 'Bad response' }));
-  if (r.ok) ssSet('sp_retried', '0');
   if (!r.ok && data.ok === undefined) data.ok = false;
-  if (r.status === 401 && data.code === 'bad_app_token')
-    pageLost('This page is from an older app run.');
+  if (r.status === 401 && data.code === 'bad_app_token' && !opts._retried) {
+    // Stale key in this tab: silently pick up the live key and retry once.
+    if (await refreshToken()) return api(path, Object.assign({}, opts, { _retried: true }));
+    pageLost('The SafeProfiles app is not answering.');
+  }
   return data;
 }
 function toast(msg) {
@@ -348,7 +347,7 @@ async function loadBrowsers() {
 
 // ---- init ----
 (async () => {
-  const ua = await api('/api/user-agents'); PRESETS = ua.ok ? ua.presets : [];
+  await refreshToken(); const ua = await api('/api/user-agents'); PRESETS = ua.ok ? ua.presets : [];
   const br = await api('/api/browsers'); BROWSERS = br.ok ? br.browsers : [];
   await loadStatus(); await loadProfiles(); await loadPool(); await loadBrowsers();
   setInterval(async () => { await loadStatus(); }, 20000);

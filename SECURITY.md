@@ -37,3 +37,14 @@ SOCKS5 proxies (Proxies tab). Design guarantees:
 Clearly warned trade-offs (shown in the UI): the practice violates GitHub's
 Terms of Service (ban risk — throwaway accounts only) and traffic transits
 pinggy.io. The feature is strictly opt-in; the app works fully without it.
+
+
+## v1.2.3 note: /api/bootstrap endpoint
+
+`GET /api/bootstrap` returns the local API token WITHOUT requiring it. This is
+safe by design: the server never sends CORS headers, so the response can only
+be read by pages opened from the server itself (same-origin policy blocks
+every other website). It exists so an already-open dashboard tab can adopt the
+current key after an app restart instead of stranding the user. The Host
+header check still applies, and all other /api/* routes keep requiring the
+token.

@@ -128,7 +128,7 @@ spam, fake engagement, CAPTCHA-solving services, 50 accounts on one IP. Don't.
 |---|---|
 | "No Chrome found" | Install Google Chrome (or Edge/Brave), restart the app |
 | Dashboard didn't auto-open | Copy the `http://127.0.0.1:…?token=…` URL from the status window into your browser |
-| "Lost connection / wrong app token" | Fixed in v1.2.2: the dashboard key and port stay the same across restarts, so open tabs keep working. If you still see it, the tab points at an old port — copy the fresh `Dashboard:` URL from the app window |
+| "Cannot reach SafeProfiles" screen | Means the app is closed - start SafeProfiles.exe. Stale tabs reconnect automatically since v1.2.3 (the dashboard fetches the live key from the app and repairs itself, no reload needed) |
 | Port busy | The app auto-picks ports 17500–17519; close other copies of the app |
 | Fingerprint extension missing in launched window | Newer branded Chrome may ignore `--load-extension`. In the launched window: `chrome://extensions` → Developer mode ON → *Load unpacked* → `…\SafeProfiles\browsers\<profile>\fingerprint_ext` (once; it sticks to that profile). Or use unbranded Chromium |
 | Proxy auth popup appears | Fixed in v1.2: proxy passwords are applied by a local relay inside the app (works even on Chrome 137+). If it still fails, re-test the proxy in the Proxies tab |

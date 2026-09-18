@@ -184,14 +184,14 @@
 
 <div id="lostOverlay" class="modal hidden">
   <div class="sheet" style="width:500px;text-align:center">
-    <h3>🔄 Lost connection to SafeProfiles</h3>
+    <h3>🔄 Cannot reach SafeProfiles</h3>
     <p id="lostMsg" class="muted"></p>
-    <p class="muted small" style="text-align:left">This happens when the SafeProfiles app was restarted or closed while this
-    page stayed open (every start generates a new security key).<br><br>
+    <p class="muted small" style="text-align:left">This screen only appears when the SafeProfiles app itself is closed
+    (a running app is reconnected automatically - the dashboard repairs its own
+    connection).<br><br>
     <b>How to fix:</b><br>
-    1. Make sure <b>SafeProfiles.exe</b> is running (only ONE copy).<br>
-    2. Press the button below — or copy the fresh <code>Dashboard:</code> URL
-    printed in the SafeProfiles window.</p>
+    1. Start <b>SafeProfiles.exe</b> (keep only ONE copy running).<br>
+    2. Come back to this tab and press the button below.</p>
     <div class="row" style="justify-content:center">
       <button class="btn primary" onclick="location.reload()">Reload page</button>
     </div>
