@@ -17,9 +17,11 @@ from pathlib import Path
 
 from .profiles import resource_path
 from .proxy_tools import format_for_chrome
+from .relay import ProxyRelay
 from .user_agents import get_preset
 
 RUNNING: dict[str, subprocess.Popen] = {}
+RELAYS: dict[str, ProxyRelay] = {}  # profile_id -> local auth relay
 
 PROXY_AUTH_MANIFEST = """{
   "manifest_version": 3,
@@ -106,6 +108,21 @@ def _write_proxy_auth_ext(profile_dir: Path, username: str, password: str) -> Pa
     return ext
 
 
+def _ensure_relay(profile_id: str, proxy: dict) -> ProxyRelay:
+    """Local SOCKS5 relay carrying this profile's proxy credentials."""
+    key = ((proxy.get("protocol") or "http").lower(), proxy.get("host", ""),
+           int(proxy.get("port") or 0), proxy.get("username", ""), proxy.get("password", ""))
+    relay = RELAYS.get(profile_id)
+    if relay is not None and getattr(relay, "key", None) == key and relay.port:
+        return relay
+    if relay is not None:
+        relay.stop()
+    relay = ProxyRelay(*key).start()
+    relay.key = key  # type: ignore[attr-defined]
+    RELAYS[profile_id] = relay
+    return relay
+
+
 def _write_fingerprint_ext(profile_dir: Path, profile: dict, preset: dict) -> Path | None:
     """Copy the fingerprint extension template and bake in this profile's seed."""
     template = resource_path("extension")
@@ -177,11 +194,22 @@ def build_command(profile: dict, data_dir: Path, store) -> tuple[list, str]:
                  "username": acc.get("socksUser", ""),
                  "password": gh.socks_password_by_id(acc["id"])}
     if proxy.get("host") and proxy.get("port"):
-        proxy_args.append(f"--proxy-server={format_for_chrome(proxy)}")
         if proxy.get("username"):
-            auth_ext = _write_proxy_auth_ext(profile_dir, proxy["username"], proxy.get("password", ""))
-            extensions.append(str(auth_ext))
-            proxy_needs_auth_ext = True
+            # Chrome 137+ (branded) ignores --load-extension, so the old
+            # auth-extension trick is unreliable. Route through a local
+            # no-auth SOCKS5 relay that applies the credentials itself.
+            try:
+                relay = _ensure_relay(profile["id"], proxy)
+                proxy_args.append(f"--proxy-server=socks5://127.0.0.1:{relay.port}")
+            except OSError:
+                # Fallback for older/other browsers: per-profile auth extension.
+                proxy_args.append(f"--proxy-server={format_for_chrome(proxy)}")
+                auth_ext = _write_proxy_auth_ext(profile_dir, proxy["username"], proxy.get("password", ""))
+                extensions.append(str(auth_ext))
+                proxy_needs_auth_ext = True
+        else:
+            proxy_args.append(f"--proxy-server={format_for_chrome(proxy)}")
+        proxy_args.append("--disable-quic")  # never let UDP leak around the proxy
 
     cmd = [
         browser["path"],
@@ -229,6 +257,9 @@ def launch(profile: dict, data_dir: Path, store) -> int:
 
 
 def stop(profile_id: str) -> bool:
+    relay = RELAYS.pop(profile_id, None)
+    if relay is not None:
+        relay.stop()
     proc = RUNNING.get(profile_id)
     if not proc:
         return False
@@ -251,6 +282,9 @@ def is_running(profile_id: str) -> bool:
     if proc.poll() is None:
         return True
     RUNNING.pop(profile_id, None)
+    relay = RELAYS.pop(profile_id, None)
+    if relay is not None:
+        relay.stop()
     return False
 
 

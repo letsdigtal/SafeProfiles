@@ -2,5 +2,5 @@
 
 No telemetry, no auto-update, no remote config. Everything runs on 127.0.0.1.
 """
-__version__ = "1.1.0"
+__version__ = "1.2.0"
 __app_name__ = "SafeProfiles"

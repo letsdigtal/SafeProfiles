@@ -35,8 +35,6 @@ class ProfileStore:
         self.gh = GhTunnels(self)
         self._profiles: dict = {}
         self.load()
-        if not self._profiles:
-            self._create_starters()
 
     # ---------- persistence ----------
     def load(self):
@@ -64,24 +62,6 @@ class ProfileStore:
         d = self.data_dir / "browsers" / profile_id
         d.mkdir(parents=True, exist_ok=True)
         return d
-
-    def _create_starters(self):
-        self.create({
-            "name": "Channel 1 - Desktop",
-            "color": "#0ea5e9",
-            "notes": "Main profile. Log in once, session stays isolated here.",
-            "uaPreset": "win_chrome",
-            "proxyMode": "none",
-            "startUrl": "https://studio.youtube.com",
-        })
-        self.create({
-            "name": "Page 1 - Mobile",
-            "color": "#ec4899",
-            "notes": "Mobile fingerprint profile.",
-            "uaPreset": "android",
-            "proxyMode": "none",
-            "startUrl": "https://www.facebook.com",
-        })
 
     # ---------- CRUD ----------
     def list(self, mask_secrets: bool = True) -> list:

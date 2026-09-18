@@ -54,7 +54,7 @@ async function loadProfiles() {
         <button class="btn" onclick="editP('${p.id}')">Edit</button>
         <button class="btn danger" onclick="delP('${p.id}')">Delete</button>
       </div>
-    </div>`).join('') || '<p>No profiles yet.</p>';
+    </div>`).join('') || '<div class="card" style="text-align:center;padding:44px 20px"><h3 style="margin:0 0 6px">No profiles yet</h3><p class="muted" style="margin:0">Click <b>+ New profile</b> to create your first browser profile — one per YouTube channel or Facebook page.</p></div>';
 }
 window.launchP = async (id) => { toast('Launching…'); const d = await api(`/api/profiles/${id}/launch`, { method: 'POST' }); toast(d.ok ? 'Launched (PID ' + d.pid + ')' : 'Error: ' + d.error); loadProfiles(); loadStatus(); };
 window.stopP = async (id) => { await api(`/api/profiles/${id}/stop`, { method: 'POST' }); loadProfiles(); loadStatus(); };

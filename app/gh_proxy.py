@@ -37,6 +37,8 @@ import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 
+from . import net
+
 try:
     from nacl import encoding as nacl_encoding
     from nacl.public import PublicKey, SealedBox
@@ -106,7 +108,7 @@ set -u
 EP_FILE="endpoint.json"
 LAST=""
 
-microsocks -i 127.0.0.1 -p 1080 -1 "$SOCKS_USER" "$SOCKS_PASS" &
+microsocks -i 127.0.0.1 -p 1080 "$SOCKS_USER" "$SOCKS_PASS" &
 SOCKS_PID=$!
 trap 'kill $SOCKS_PID 2>/dev/null' EXIT
 
@@ -179,7 +181,7 @@ def _request(method: str, path: str, token: str, body: dict | None = None):
     if data is not None:
         req.add_header("Content-Type", "application/json")
     try:
-        with urllib.request.urlopen(req, timeout=30) as r:
+        with net.urlopen(req, timeout=30) as r:
             raw = r.read()
             return r.status, (json.loads(raw) if raw else {}), dict(r.headers)
     except urllib.error.HTTPError as e:
@@ -190,15 +192,25 @@ def _request(method: str, path: str, token: str, body: dict | None = None):
             parsed = {}
         msg = parsed.get("message") or f"GitHub API HTTP {e.code}"
         if e.code == 401:
-            msg = "GitHub rejected the token (401 Bad credentials). Generate a fresh one."
+            msg = ("GitHub rejected this token (401 Bad credentials). Common causes: "
+                   "the token was deleted or revoked, it was copied incompletely, or "
+                   "it no longer exists. Create a fresh CLASSIC token (tick repo + "
+                   "workflow) and paste the whole ghp_... string.")
         elif e.code == 403 and "rate limit" in msg.lower():
             msg = "GitHub rate limit reached - wait a few minutes and retry."
         raise GitHubError(e.code, msg) from None
     except (urllib.error.URLError, TimeoutError, OSError) as e:
-        raise GitHubError(0, f"Cannot reach github.com ({e}). Check your internet.") from None
+        reason = getattr(e, "reason", e)
+        raise GitHubError(0, f"Cannot reach github.com ({reason}). Check your internet "
+                             "connection.") from None
 
 
 def verify_token(token: str) -> dict:
+    if token.startswith("github_pat_"):
+        raise GitHubError(400,
+            "That is a FINE-GRAINED token. SafeProfiles needs a CLASSIC token:\n"
+            "GitHub -> Settings -> Developer settings -> Personal access tokens -> "
+            "Tokens (classic) -> Generate new token -> tick repo + workflow.")
     _, user, headers = _request("GET", "/user", token)
     scopes = (headers.get("X-OAuth-Scopes") or headers.get("x-oauth-scopes") or "").strip()
     if scopes:  # classic tokens report their scopes; fine-grained do not

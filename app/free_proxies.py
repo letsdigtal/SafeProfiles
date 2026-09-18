@@ -10,6 +10,7 @@ import time
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+from . import net
 from .proxy_tools import test_proxy
 
 SOURCES = {
@@ -42,7 +43,7 @@ def fetch_lists(protocols: list | None = None, timeout: int = 20) -> dict:
         for url in SOURCES.get(proto, []):
             try:
                 req = urllib.request.Request(url, headers={"User-Agent": "SafeProfiles/1.0"})
-                with urllib.request.urlopen(req, timeout=timeout) as r:
+                with net.urlopen(req, timeout=timeout) as r:
                     text = r.read().decode("utf-8", errors="ignore")
                 for host, port in LINE_RE.findall(text):
                     if 1 <= int(port) <= 65535:
