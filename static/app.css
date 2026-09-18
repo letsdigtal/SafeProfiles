@@ -1,0 +1,53 @@
+/* SafeProfiles dashboard - zero external requests (works offline). System fonts only. */
+:root { --bg:#0b1220; --card:#111c33; --line:#22314f; --txt:#e6ecf7; --mut:#93a1b8;
+  --pri:#0ea5e9; --ok:#22c55e; --bad:#ef4444; --warn:#f59e0b; }
+* { box-sizing:border-box; } body { margin:0; background:var(--bg); color:var(--txt);
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif; }
+.topbar { display:flex; align-items:center; gap:16px; padding:10px 18px;
+  background:#0d1526; border-bottom:1px solid var(--line); position:sticky; top:0; z-index:5; }
+.brand { font-size:18px; white-space:nowrap; } .ver { color:var(--mut); font-size:12px; }
+.tabs { display:flex; gap:6px; flex:1; } .tab { background:none; border:0; color:var(--mut);
+  padding:8px 14px; border-radius:8px; cursor:pointer; font-size:14px; }
+.tab.active, .tab:hover { background:#1a2745; color:#fff; }
+.pill { font-size:12px; padding:4px 12px; border-radius:999px; background:#1a2745; color:var(--mut); }
+.pill.ok { background:#052e1b; color:#4ade80; }
+main { max-width:1100px; margin:0 auto; padding:20px; }
+.hidden { display:none !important; } .muted { color:var(--mut); } .small { font-size:12px; }
+.toolbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; }
+.toolbar h2 { margin:0; }
+.btn { background:#1a2745; color:#fff; border:1px solid var(--line); border-radius:8px;
+  padding:8px 14px; cursor:pointer; font-size:14px; }
+.btn:hover { background:#24355c; } .btn.primary { background:var(--pri); border-color:var(--pri); color:#04222f; font-weight:600; }
+.btn.danger { background:#3a1114; border-color:#7f1d1d; color:#fca5a5; }
+.btn:disabled { opacity:.5; cursor:wait; }
+.grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:14px; }
+.pcard { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; border-top:4px solid var(--pri); }
+.pcard h3 { margin:0 0 4px; } .pmeta { color:var(--mut); font-size:12px; margin:6px 0; }
+.pcard .row { margin-top:10px; } .badge { display:inline-block; font-size:11px; padding:2px 8px; border-radius:99px; background:#1a2745; color:var(--mut); }
+.badge.run { background:#052e1b; color:#4ade80; }
+.card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:14px; }
+.cards2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+@media (max-width:800px){ .cards2{grid-template-columns:1fr;} }
+.row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin:8px 0; }
+.row.end { justify-content:flex-end; }
+textarea, input, select { background:#0b1428; color:var(--txt); border:1px solid var(--line);
+  border-radius:8px; padding:8px 10px; font-size:14px; width:100%; }
+textarea { resize:vertical; } .num { width:90px; } label { display:block; font-size:13px; margin:6px 0; }
+label.chk, .row label { display:flex; gap:6px; align-items:center; width:auto; }
+.row label input[type=checkbox], .row label input[type=radio] { width:auto; }
+fieldset { border:1px solid var(--line); border-radius:10px; margin-top:10px; }
+legend { padding:0 6px; color:var(--mut); font-size:13px; }
+.result { background:#070d1a; border:1px solid var(--line); border-radius:8px; padding:10px;
+  white-space:pre-wrap; font-size:13px; min-height:40px; }
+.tbl { width:100%; border-collapse:collapse; font-size:13px; }
+.tbl th,.tbl td { border-bottom:1px solid var(--line); padding:6px 8px; text-align:left; }
+.warn { background:#2a1c05; border:1px solid #92600e; color:#fcd34d; border-radius:10px; padding:10px 14px; margin-bottom:14px; font-size:14px; }
+.list .li { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:10px 14px; margin-bottom:8px; font-size:14px; }
+.list code { color:var(--mut); font-size:12px; }
+.help li { margin:6px 0; } code { background:#0b1428; padding:1px 6px; border-radius:6px; }
+.modal { position:fixed; inset:0; background:rgba(0,0,0,.6); display:flex; align-items:flex-start;
+  justify-content:center; padding:30px 12px; overflow:auto; z-index:10; }
+.sheet { background:#0d1730; border:1px solid var(--line); border-radius:14px; padding:20px; width:640px; max-width:100%; }
+.sheet h3 { margin-top:0; } .form label { margin:8px 0; }
+.toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:#0d1730;
+  border:1px solid var(--pri); border-radius:10px; padding:10px 18px; z-index:20; }

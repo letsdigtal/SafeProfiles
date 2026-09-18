@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "SafeProfiles Fingerprint Consistency",
+  "version": "1.0.0",
+  "description": "Keeps this profile's fingerprint consistent (canvas/audio noise, WebGL, timezone, screen). Open source - see fingerprint.js.",
+  "permissions": [],
+  "host_permissions": ["<all_urls>"],
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["profile-config.js", "fingerprint.js"],
+      "run_at": "document_start",
+      "all_frames": true,
+      "world": "MAIN"
+    }
+  ]
+}

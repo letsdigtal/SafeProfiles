@@ -1,0 +1,45 @@
+name: Build Windows EXE
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+      - name: Build onefile exe
+        run: pyinstaller SafeProfiles.spec --noconfirm
+      - name: Upload exe artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SafeProfiles-windows
+          path: dist/SafeProfiles.exe
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: SafeProfiles-windows
+          path: dist
+      - name: Create GitHub Release with exe
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/SafeProfiles.exe
+          generate_release_notes: true

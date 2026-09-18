@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+dist/
+build/
+*.egg-info/
+automation/client_secrets.json
+automation/token.json
+.key
+profiles.json
+proxy_pool.json

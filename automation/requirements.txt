@@ -1,0 +1,7 @@
+# Optional: only needed for the automation/ folder (NOT needed to run the app).
+playwright>=1.40
+# For the official YouTube API uploader (recommended path):
+google-api-python-client>=2.100
+google-auth-oauthlib>=1.2
+# After installing playwright also run:  playwright install chromium
+# (or point the scripts at your installed Chrome with --browser-path)

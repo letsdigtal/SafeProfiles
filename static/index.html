@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SafeProfiles - Multi-Profile Browser Manager</title>
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">🛡️ <b>SafeProfiles</b> <span id="ver" class="ver"></span></div>
+  <nav class="tabs">
+    <button class="tab active" data-tab="profiles">Profiles</button>
+    <button class="tab" data-tab="proxies">Proxies</button>
+    <button class="tab" data-tab="browsers">Browsers</button>
+    <button class="tab" data-tab="help">Help &amp; Safety</button>
+  </nav>
+  <div id="statusPill" class="pill">starting…</div>
+</header>
+
+<main>
+  <!-- PROFILES -->
+  <section id="tab-profiles" class="tabpage">
+    <div class="toolbar">
+      <div><h2>Browser profiles</h2>
+      <p class="muted">Each profile = isolated cookies &amp; login sessions (one per channel / page / account).</p></div>
+      <button id="btnNew" class="btn primary">+ New profile</button>
+    </div>
+    <div id="profiles" class="grid"></div>
+  </section>
+
+  <!-- PROXIES -->
+  <section id="tab-proxies" class="tabpage hidden">
+    <div class="warn">⚠️ <b>Free proxies are run by strangers.</b> Never log into real Facebook / YouTube / Google accounts through one.
+    Use direct connection (no proxy) or your own trusted proxy for real logins.</div>
+    <div class="cards2">
+      <div class="card">
+        <h3>Custom proxy tester</h3>
+        <p class="muted">Paste in any format: <code>ip:port</code>, <code>ip:port:user:pass</code>, <code>user:pass@ip:port</code>, <code>socks5://…</code></p>
+        <textarea id="pxRaw" rows="2" placeholder="e.g. 123.45.67.89:8080  or  socks5://user:pass@123.45.67.89:1080"></textarea>
+        <div class="row">
+          <button id="btnPxParse" class="btn">Parse</button>
+          <button id="btnPxTest" class="btn primary">Test live</button>
+        </div>
+        <pre id="pxResult" class="result">No test yet.</pre>
+      </div>
+      <div class="card">
+        <h3>Free proxy pool (100% free)</h3>
+        <p class="muted">Step 1: fetch public lists. Step 2: test &amp; keep the working ones. Then assign one to a profile.</p>
+        <div class="row">
+          <label><input type="checkbox" id="poolHttp" checked> HTTP</label>
+          <label><input type="checkbox" id="poolSocks5" checked> SOCKS5</label>
+          <label><input type="checkbox" id="poolSocks4"> SOCKS4</label>
+        </div>
+        <div class="row">
+          <button id="btnPoolFetch" class="btn">1. Fetch lists</button>
+          <label class="muted">test first <input id="poolLimit" type="number" value="25" min="5" max="100" class="num"></label>
+          <button id="btnPoolTest" class="btn primary">2. Test &amp; save</button>
+          <button id="btnPoolClear" class="btn danger">Clear</button>
+        </div>
+        <pre id="poolResult" class="result">Pool is empty. Fetch + test to fill it.</pre>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Saved pool (<span id="poolCount">0</span>)</h3>
+      <table class="tbl"><thead><tr><th>Proxy</th><th>Country</th><th>City</th><th>Ping</th><th></th></tr></thead>
+      <tbody id="poolBody"></tbody></table>
+    </div>
+  </section>
+
+  <!-- BROWSERS -->
+  <section id="tab-browsers" class="tabpage hidden">
+    <h2>Detected browsers</h2>
+    <p class="muted">SafeProfiles uses browsers already installed on your PC (nothing bundled, app stays small).</p>
+    <div id="browsers" class="list"></div>
+  </section>
+
+  <!-- HELP -->
+  <section id="tab-help" class="tabpage hidden">
+    <div class="card">
+      <h3>How this keeps you safer than “anti-detect” exes</h3>
+      <ul class="help">
+        <li>✅ <b>100% open source</b> — every line is in this repo. No hidden exe updates.</li>
+        <li>✅ <b>No telemetry, no accounts, no tokens needed.</b> Works fully offline.</li>
+        <li>✅ <b>No remote-debugging flags</b> — websites cannot drive your logged-in tabs.</li>
+        <li>✅ <b>Local API is locked</b> — 127.0.0.1 only + random per-run token + no CORS.</li>
+        <li>✅ <b>Proxy passwords encrypted</b> on your disk (never plaintext).</li>
+      </ul>
+      <h3>Quick start</h3>
+      <ol class="help">
+        <li>Create one profile per YouTube channel / Facebook page. Pick Desktop or Mobile fingerprint.</li>
+        <li>Press <b>Launch</b>, log in once inside that profile window. Sessions stay separated.</li>
+        <li>Optional: set a custom proxy per profile (tested above), or leave direct for maximum safety.</li>
+        <li>For posting/uploading, prefer the <b>official APIs</b> — see <code>automation/README.md</code>.</li>
+      </ol>
+      <h3>Honest note about “undetectable”</h3>
+      <p>No tool can promise Facebook/YouTube will never detect automation. What actually works: consistent fingerprint per profile, clean IP, human pacing, real activity history, and official APIs for uploads/posts. Anyone promising invisibility is lying.</p>
+    </div>
+  </section>
+</main>
+
+<!-- PROFILE MODAL -->
+<div id="modal" class="modal hidden">
+  <div class="sheet">
+    <h3 id="modalTitle">New profile</h3>
+    <div class="form">
+      <label>Name <input id="fName" placeholder="Channel 1 - Desktop"></label>
+      <div class="row">
+        <label>Color <input id="fColor" type="color" value="#0ea5e9"></label>
+        <label>Browser <select id="fBrowser"><option value="auto">Auto (first found)</option></select></label>
+      </div>
+      <label>Notes <input id="fNotes" placeholder="What is this profile for?"></label>
+      <div class="row">
+        <label>Fingerprint preset <select id="fPreset"></select></label>
+        <label class="chk"><input id="fMobile" type="checkbox"> Mobile device</label>
+      </div>
+      <label>User-Agent <input id="fUA"></label>
+      <div class="row">
+        <label>Width <input id="fW" type="number" value="1920" class="num"></label>
+        <label>Height <input id="fH" type="number" value="1080" class="num"></label>
+        <label>Locale <input id="fLocale" value="en-US"></label>
+      </div>
+      <label>Timezone (match proxy country, e.g. Asia/Karachi, America/New_York) <input id="fTZ" list="tzList" placeholder="(optional)">
+        <datalist id="tzList">
+          <option>Asia/Karachi</option><option>Asia/Dubai</option><option>Asia/Kolkata</option>
+          <option>Europe/London</option><option>America/New_York</option><option>America/Los_Angeles</option>
+        </datalist></label>
+      <label>Start URL <input id="fURL" value="about:blank"></label>
+      <fieldset><legend>Proxy</legend>
+        <div class="row">
+          <label><input type="radio" name="pmode" value="none" checked> None (direct — safest for logins)</label>
+          <label><input type="radio" name="pmode" value="custom"> Custom</label>
+          <label><input type="radio" name="pmode" value="pool"> From free pool</label>
+        </div>
+        <div id="customBox" class="hidden">
+          <label>Paste proxy (any format) <input id="fPxRaw" placeholder="ip:port:user:pass"></label>
+          <div class="row">
+            <label>Protocol <select id="fProto"><option>http</option><option>https</option><option>socks4</option><option>socks5</option></select></label>
+            <label>Host <input id="fHost"></label>
+            <label>Port <input id="fPort" class="num"></label>
+          </div>
+          <div class="row">
+            <label>Username <input id="fUser"></label>
+            <label>Password <input id="fPass" type="password" placeholder="(unchanged)"></label>
+            <button id="btnFillParse" class="btn" type="button">Parse ↓</button>
+            <button id="btnFillTest" class="btn" type="button">Test</button>
+          </div>
+          <pre id="fillResult" class="result small"></pre>
+        </div>
+        <div id="poolBox" class="hidden">
+          <label>Pool proxy <select id="fPool"><option value="">— load pool in Proxies tab —</option></select></label>
+        </div>
+      </fieldset>
+      <label id="seedRow" class="chk hidden"><input id="fSeed" type="checkbox"> Generate new fingerprint seed (changes canvas/audio noise)</label>
+    </div>
+    <div class="row end">
+      <button id="btnCancel" class="btn">Cancel</button>
+      <button id="btnSave" class="btn primary">Save profile</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+<script>window.__APP_TOKEN__ = "__APP_TOKEN__";</script>
+<script src="/app.js"></script>
+</body>
+</html>
