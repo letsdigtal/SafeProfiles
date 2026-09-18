@@ -28,6 +28,11 @@ def main(argv=None) -> int:
     print(f"  Dashboard: {server.base_url}", flush=True)
     print(f"  Data folder: {server.store.data_dir}", flush=True)
     print("  Keep this window open. Press Ctrl+C to quit.", flush=True)
+    if not args.port and server.port != 17500:
+        print("", flush=True)
+        print("  NOTE: port 17500 was busy - another SafeProfiles copy may", flush=True)
+        print("  already be running. Close extra copies to avoid confusion,", flush=True)
+        print(f"  and always use THIS window's URL: {server.base_url}", flush=True)
     print("=" * 60, flush=True)
 
     if not args.no_browser:

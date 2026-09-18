@@ -140,7 +140,8 @@ class AppServer:
                 if not path.startswith("/api/"):
                     return self._send_json({"ok": False, "error": "Endpoint not found."}, 404)
                 if not self._authed(qs):
-                    return self._send_json({"ok": False, "error": "Missing or wrong app token."}, 401)
+                    return self._send_json({"ok": False, "error": "Missing or wrong app token.",
+                                        "code": "bad_app_token"}, 401)
 
                 # ---- API ----
                 if path == "/api/status" and method == "GET":

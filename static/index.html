@@ -182,6 +182,21 @@
   </div>
 </div>
 
+<div id="lostOverlay" class="modal hidden">
+  <div class="sheet" style="width:500px;text-align:center">
+    <h3>🔄 Lost connection to SafeProfiles</h3>
+    <p id="lostMsg" class="muted"></p>
+    <p class="muted small" style="text-align:left">This happens when the SafeProfiles app was restarted or closed while this
+    page stayed open (every start generates a new security key).<br><br>
+    <b>How to fix:</b><br>
+    1. Make sure <b>SafeProfiles.exe</b> is running (only ONE copy).<br>
+    2. Press the button below — or copy the fresh <code>Dashboard:</code> URL
+    printed in the SafeProfiles window.</p>
+    <div class="row" style="justify-content:center">
+      <button class="btn primary" onclick="location.reload()">Reload page</button>
+    </div>
+  </div>
+</div>
 <div id="toast" class="toast hidden"></div>
 <script>window.__APP_TOKEN__ = "__APP_TOKEN__";</script>
 <script src="/app.js"></script>
