@@ -349,6 +349,13 @@ async function loadBrowsers() {
 (async () => {
   await refreshToken(); const ua = await api('/api/user-agents'); PRESETS = ua.ok ? ua.presets : [];
   const br = await api('/api/browsers'); BROWSERS = br.ok ? br.browsers : [];
-  await loadStatus(); await loadProfiles(); await loadPool(); await loadBrowsers();
+  await loadStatus(); await loadProfiles(); await loadPool(); await loadBrowsers(); loadGH();
+  api('/api/gh/prefill').then(d => {
+    if (d.ok && d.token) {
+      document.getElementById('ghToken').value = d.token;
+      const n = document.getElementById('ghPrefillNote');
+      if (n) n.textContent = 'Token pre-filled from token.txt (the file deletes itself after you add the account).';
+    }
+  });
   setInterval(async () => { await loadStatus(); }, 20000);
 })();

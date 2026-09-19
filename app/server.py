@@ -292,6 +292,11 @@ class AppServer:
                     return self._send_json({"ok": True})
 
                 # ---- GitHub tunnel accounts (optional; user's own throwaway accounts) ----
+                if path == "/api/gh/prefill" and method == "GET":
+                    from .gh_proxy import prefill_token_path
+                    _pf, _pt = prefill_token_path(store.data_dir)
+                    return self._send_json({"ok": True, "token": _pt,
+                                            "source": str(_pf) if _pf else ""})
                 if path == "/api/gh/accounts" and method == "GET":
                     return self._send_json({"ok": True, "accounts": store.gh.list(refresh=True)})
                 if path == "/api/gh/accounts" and method == "POST":
@@ -300,6 +305,8 @@ class AppServer:
                         acc = store.gh.add(body.get("label", ""), body.get("token", ""))
                     except GitHubError as e:
                         return self._send_json({"ok": False, "error": str(e)}, 400)
+                    from .gh_proxy import consume_prefill_token
+                    consume_prefill_token(store.data_dir)  # token.txt served its purpose
                     return self._send_json({"ok": True, "account": acc})
                 if (len(parts) >= 5 and parts[0] == "api" and parts[1] == "gh"
                         and parts[2] == "accounts"):

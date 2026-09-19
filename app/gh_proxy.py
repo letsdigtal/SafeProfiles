@@ -36,6 +36,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
+from pathlib import Path
 
 from . import net
 
@@ -289,19 +290,29 @@ def set_secret(token: str, owner: str, repo: str, name: str, value: str):
 
 
 def set_workflow_enabled(token: str, owner: str, repo: str, enabled: bool):
-    _request("PUT", f"/repos/{owner}/{repo}/actions/workflows/tunnel.yml/state", token,
-             {"state": "enabled" if enabled else "disabled"})
+    for attempt in range(4):
+        try:
+            _request("PUT", f"/repos/{owner}/{repo}/actions/workflows/tunnel.yml/state", token,
+                     {"state": "enabled" if enabled else "disabled"})
+            return
+        except GitHubError as e:
+            if e.status == 404 and attempt < 3:
+                time.sleep(4)  # brand-new repo: workflow not indexed yet
+                continue
+            if e.status == 404:
+                return  # fresh workflows are enabled by default; nothing to do
+            raise
 
 
 def dispatch(token: str, owner: str, repo: str):
-    for attempt in range(3):  # just-created workflows can take a moment
+    for attempt in range(6):  # just-created workflows can take a minute to index
         try:
             _request("POST", f"/repos/{owner}/{repo}/actions/workflows/tunnel.yml/dispatches",
                      token, {"ref": "main"})
             return
         except GitHubError as e:
-            if e.status in (404, 422) and attempt < 2:
-                time.sleep(3)
+            if e.status in (404, 422) and attempt < 5:
+                time.sleep(6)
                 continue
             raise
 
@@ -342,6 +353,41 @@ def has_active_run(token: str, owner: str, repo: str) -> bool:
                           token)
     return any(r.get("status") in ("in_progress", "queued")
                for r in data.get("workflow_runs", []))
+
+
+# ---------------------------------------------------------------------------
+# Optional token pre-fill: put a token in token.txt next to the exe (or in the
+# working directory) and the dashboard loads it automatically. The file is
+# deleted once the account is added. Nothing is ever baked into the exe/repo.
+# ---------------------------------------------------------------------------
+def prefill_token_path(data_dir: Path | None = None):
+    import sys
+    candidates = []
+    if getattr(sys, "frozen", False):  # PyInstaller exe
+        candidates.append(Path(sys.executable).parent / "token.txt")
+    else:
+        candidates.append(Path.cwd() / "token.txt")
+        candidates.append(Path(__file__).resolve().parent.parent / "token.txt")
+    if data_dir is not None:
+        candidates.append(Path(data_dir) / "token.txt")
+    for c in candidates:
+        try:
+            if c.is_file():
+                t = c.read_text(encoding="utf-8", errors="ignore").strip()
+                if len(t) >= 20:
+                    return c, t
+        except OSError:
+            continue
+    return None, ""
+
+
+def consume_prefill_token(data_dir: Path | None = None):
+    p, _ = prefill_token_path(data_dir)
+    if p is not None:
+        try:
+            p.unlink()
+        except OSError:
+            pass
 
 
 # ---------------------------------------------------------------------------
@@ -447,6 +493,12 @@ class GhTunnels:
         a = self._find(account_id)
         token = self.token_for(a)
         set_workflow_enabled(token, a["username"], a["repo"], True)
+        try:
+            # cancel any stale run so the fresh one uses current credentials
+            cancel_active_runs(token, a["username"], a["repo"])
+            time.sleep(6)  # let the cancel land before dispatching
+        except GitHubError:
+            pass  # nothing to cancel - dispatch anyway
         dispatch(token, a["username"], a["repo"])
         with self._lock:
             a["status"] = "starting"

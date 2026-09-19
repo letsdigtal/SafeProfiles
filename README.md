@@ -92,6 +92,11 @@ SafeProfiles includes a **safe, fully readable version** of it.
    **Refresh** (≈1–2 min) then **Test**.
 5. Edit profile → Proxy → **GitHub tunnel** → pick the account → Launch. 🎉
 
+   **Tip — pre-fill the token:** put it in a `token.txt` file next to
+   `SafeProfiles.exe`. The dashboard loads it automatically and the file
+   deletes itself once the account is added. (Never bake tokens into the
+   exe or repo — this repo is public!)
+
 Safer than the original app's version:
 
 - your token is stored **encrypted** locally and is **never uploaded anywhere**
