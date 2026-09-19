@@ -110,10 +110,22 @@ def test_proxy(protocol: str, host: str, port: int, username: str = "",
         sock.sendall(req.encode())
         raw = b""
         while True:
-            chunk = sock.recv(65536)
+            try:
+                chunk = sock.recv(65536)
+            except socket.timeout:
+                break  # brief idle after data - we have what we need
             if not chunk:
                 break
             raw += chunk
+            # Stop once the body is complete (Content-Length). Some servers
+            # keep the connection open, and waiting for EOF would falsely
+            # look like a timeout (v1.2.6 fix).
+            if b"\r\n\r\n" in raw:
+                head, _, body = raw.partition(b"\r\n\r\n")
+                m = re.search(rb"Content-Length:\s*(\d+)", head, re.IGNORECASE)
+                if m and len(body) >= int(m.group(1)):
+                    break
+                sock.settimeout(2.5)  # got data; only wait briefly for more
         latency = int((time.time() - start) * 1000)
         text = raw.decode("utf-8", errors="ignore")
         if "407" in text.split("\r\n", 1)[0]:

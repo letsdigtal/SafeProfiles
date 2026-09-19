@@ -142,6 +142,7 @@ spam, fake engagement, CAPTCHA-solving services, 50 accounts on one IP. Don't.
 | "Token scopes missing" | Create a CLASSIC token and tick both **repo** and **workflow** scopes |
 | Tunnel worked, then died | Runners end after ~5.5 h (cron auto-restarts, small gaps). Press Start, then Refresh |
 | Browser window loses network after ~1h | Fixed in v1.2.5: the tunnel address rotates hourly and the app now follows it automatically - keep the SafeProfiles app open while browsing. If an old window still has no network: close it, press Refresh on the account, launch the profile again |
+| Launch works but pages say "no network" | Since v1.2.6 launch REFUSES dead tunnels with a clear message. Usual cause: the tunnel's GitHub account was banned (they live hours-days) - Proxies tab shows it as "dead": Remove it, add a new GitHub account, then Edit profile -> pick the new tunnel. Your channel/logins are not affected |
 
 ## 📁 Project layout
 

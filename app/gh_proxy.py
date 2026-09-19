@@ -394,27 +394,70 @@ def consume_prefill_token(data_dir: Path | None = None):
 # Account storage (gh_accounts.json in the user's private data folder).
 # Tokens + SOCKS passwords are encrypted with the local SecretsStore.
 # ---------------------------------------------------------------------------
+def _poll_once(tunnels: "GhTunnels", misses: dict) -> None:
+    """One pass: refresh endpoints, mark dead/stopped accounts honestly."""
+    import socket as _s
+    with tunnels._lock:
+        accounts = list(tunnels._accounts)
+    for a in accounts:
+        try:
+            ep = tunnels.endpoint_of(a["username"], a["repo"])
+        except GitHubError as e:
+            if e.status == 404:
+                # repo or endpoint file missing - is the repo itself gone?
+                gone = False
+                try:
+                    tok = tunnels.token_for(a)
+                    _request("GET", f"/repos/{a['username']}/{a['repo']}", tok)
+                except GitHubError as re:
+                    gone = re.status == 404
+                except Exception:
+                    pass
+                if gone:
+                    with tunnels._lock:
+                        if a.get("status") != "dead":
+                            print(f"[tunnel] {a.get('label', a['username'])}: "
+                                  "account/repo REMOVED from GitHub (banned?)", flush=True)
+                        a["status"] = "dead"
+                        a["statusNote"] = ("Tunnel repo removed from GitHub (account "
+                                           "banned?). Remove this account and add a "
+                                           "new one.")
+                        tunnels._save()
+            continue
+        new_ep = ep.get("endpoint", "")
+        if new_ep and new_ep != a.get("endpoint"):
+            with tunnels._lock:
+                a["endpoint"] = new_ep
+                a["endpointUpdated"] = ep.get("updated", "")
+                a["status"] = "active"
+                a["statusNote"] = ""
+                tunnels._save()
+            print(f"[tunnel] {a.get('label', a['username'])}: new address {new_ep}",
+                  flush=True)
+            misses[a["id"]] = 0
+            continue
+        if not new_ep:
+            m = misses.get(a["id"], 0) + 1
+            misses[a["id"]] = m
+            if m >= 3 and a.get("status") not in ("stopped", "dead"):
+                with tunnels._lock:
+                    a["status"] = "stopped"
+                    a["statusNote"] = ("No tunnel address published - press Start "
+                                       "(then wait ~1-2 min).")
+                    tunnels._save()
+
+
 def _poll_endpoints_forever(tunnels: "GhTunnels") -> None:
     """Daemon: every ~90s refresh tunnel endpoints from raw.githubusercontent.com
     so relays can follow address changes without any user action."""
     import time as _time
+    misses: dict = {}
     while True:
         _time.sleep(90)
-        with tunnels._lock:
-            accounts = list(tunnels._accounts)
-        for a in accounts:
-            try:
-                ep = tunnels.endpoint_of(a["username"], a["repo"])
-            except GitHubError:
-                continue
-            new_ep = ep.get("endpoint", "")
-            if new_ep and new_ep != a.get("endpoint"):
-                with tunnels._lock:
-                    a["endpoint"] = new_ep
-                    a["endpointUpdated"] = ep.get("updated", "")
-                    tunnels._save()
-                print(f"[tunnel] {a.get('label', a['username'])}: new address {new_ep}",
-                      flush=True)
+        try:
+            _poll_once(tunnels, misses)
+        except Exception:
+            pass  # a polling error must never kill the daemon
 
 
 class GhTunnels:

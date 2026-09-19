@@ -13,6 +13,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 from .profiles import resource_path
@@ -184,6 +185,27 @@ def _write_fingerprint_ext(profile_dir: Path, profile: dict, preset: dict) -> Pa
     return ext
 
 
+def _verify_tunnel(profile: dict, store, relay: ProxyRelay) -> None:
+    """Fail FAST with a clear message if the tunnel is dead, instead of
+    launching a browser that later shows 'no network'."""
+    from .proxy_tools import test_proxy
+    for attempt in (1, 2):
+        res = test_proxy("socks5", "127.0.0.1", relay.port, "", "", timeout=12)
+        if res.get("success"):
+            print(f"[tunnel] {profile.get('name', profile['id'])}: exit IP "
+                  f"{res.get('ip')} ({res.get('country')})", flush=True)
+            return
+        if attempt == 1:
+            time.sleep(5)  # maybe mid-rotation; let the poller catch up
+    reason = res.get("error", "unknown error")
+    raise RuntimeError(
+        "This profile's tunnel is NOT working (dead address or the tunnel's "
+        "GitHub account was banned). Open the Proxies tab: if the account "
+        "shows 'dead', Remove it and add a NEW GitHub account, then Edit "
+        "profile -> pick the new tunnel. If it was rotating, wait a minute "
+        "and Launch again. (Reason: " + str(reason) + ")")
+
+
 def build_command(profile: dict, data_dir: Path, store) -> tuple[list, str]:
     """Returns (argv, profile_dir). Raises RuntimeError if no browser found."""
     browser = resolve_browser(profile.get("browser", "auto"))
@@ -234,8 +256,13 @@ def build_command(profile: dict, data_dir: Path, store) -> tuple[list, str]:
             # auth-extension trick is unreliable. Route through a local
             # no-auth SOCKS5 relay that applies the credentials itself.
             try:
-                relay = _ensure_gh_relay(profile, store)
-                proxy_args.append(f"--proxy-server=socks5://127.0.0.1:{relay.port}")
+                if mode == "github":
+                    relay = _ensure_gh_relay(profile, store)
+                    proxy_args.append(f"--proxy-server=socks5://127.0.0.1:{relay.port}")
+                    _verify_tunnel(profile, store, relay)
+                else:
+                    relay = _ensure_relay(profile["id"], proxy)
+                    proxy_args.append(f"--proxy-server=socks5://127.0.0.1:{relay.port}")
             except OSError:
                 # Fallback for older/other browsers: per-profile auth extension.
                 proxy_args.append(f"--proxy-server={format_for_chrome(proxy)}")
