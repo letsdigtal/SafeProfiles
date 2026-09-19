@@ -394,6 +394,29 @@ def consume_prefill_token(data_dir: Path | None = None):
 # Account storage (gh_accounts.json in the user's private data folder).
 # Tokens + SOCKS passwords are encrypted with the local SecretsStore.
 # ---------------------------------------------------------------------------
+def _poll_endpoints_forever(tunnels: "GhTunnels") -> None:
+    """Daemon: every ~90s refresh tunnel endpoints from raw.githubusercontent.com
+    so relays can follow address changes without any user action."""
+    import time as _time
+    while True:
+        _time.sleep(90)
+        with tunnels._lock:
+            accounts = list(tunnels._accounts)
+        for a in accounts:
+            try:
+                ep = tunnels.endpoint_of(a["username"], a["repo"])
+            except GitHubError:
+                continue
+            new_ep = ep.get("endpoint", "")
+            if new_ep and new_ep != a.get("endpoint"):
+                with tunnels._lock:
+                    a["endpoint"] = new_ep
+                    a["endpointUpdated"] = ep.get("updated", "")
+                    tunnels._save()
+                print(f"[tunnel] {a.get('label', a['username'])}: new address {new_ep}",
+                      flush=True)
+
+
 class GhTunnels:
     def __init__(self, store):
         self.store = store
@@ -402,6 +425,10 @@ class GhTunnels:
         self._lock = threading.RLock()
         self._accounts: list[dict] = []
         self._load()
+        # v1.2.5: keep tunnel endpoints fresh in the background so open
+        # browsers follow address rotations (pinggy changes ~hourly).
+        threading.Thread(target=_poll_endpoints_forever, args=(self,),
+                         daemon=True, name="sp-endpoint-poller").start()
 
     # ---------- storage ----------
     def _load(self):
@@ -417,6 +444,22 @@ class GhTunnels:
         tmp = self.file.with_suffix(".tmp")
         tmp.write_text(json.dumps(self._accounts, indent=2), encoding="utf-8")
         tmp.replace(self.file)
+
+    def endpoint_of(self, username: str, repo: str) -> dict:
+        """Read endpoint.json via raw.githubusercontent.com (public repo, no token,
+        no strict rate limits). Returns {endpoint, updated} or raises GitHubError."""
+        url = f"https://raw.githubusercontent.com/{username}/{repo}/main/endpoint.json"
+        req = urllib.request.Request(url, headers={"User-Agent": "SafeProfiles"})
+        try:
+            with net.urlopen(req, timeout=15) as r:
+                obj = json.loads(r.read().decode("utf-8", "replace"))
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                return {"endpoint": "", "updated": ""}
+            raise GitHubError(e.code, f"endpoint.json fetch failed: HTTP {e.code}") from None
+        except (urllib.error.URLError, TimeoutError, OSError, ValueError) as e:
+            raise GitHubError(0, f"endpoint.json fetch failed: {e}") from None
+        return {"endpoint": obj.get("endpoint", ""), "updated": obj.get("updated", "")}
 
     def _find(self, account_id: str) -> dict:
         with self._lock:

@@ -141,6 +141,7 @@ spam, fake engagement, CAPTCHA-solving services, 50 accounts on one IP. Don't.
 | Tunnel stuck on "starting" | Open that account's repo → Actions tab on github.com and read the run's error; verify the account's email (Actions needs it); press Start again |
 | "Token scopes missing" | Create a CLASSIC token and tick both **repo** and **workflow** scopes |
 | Tunnel worked, then died | Runners end after ~5.5 h (cron auto-restarts, small gaps). Press Start, then Refresh |
+| Browser window loses network after ~1h | Fixed in v1.2.5: the tunnel address rotates hourly and the app now follows it automatically - keep the SafeProfiles app open while browsing. If an old window still has no network: close it, press Refresh on the account, launch the profile again |
 
 ## 📁 Project layout
 

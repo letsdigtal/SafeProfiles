@@ -108,6 +108,41 @@ def _write_proxy_auth_ext(profile_dir: Path, username: str, password: str) -> Pa
     return ext
 
 
+def _ensure_gh_relay(profile: dict, store) -> ProxyRelay:
+    """Relay for a GitHub tunnel: follows the CURRENT tunnel address (it
+    rotates ~hourly) and keeps a stable per-profile port so an open browser
+    window survives both address rotations and app restarts."""
+    pid = profile["id"]
+    gh_id = profile.get("ghAccountId", "")
+    key = ("github", gh_id)
+    acc = store.gh.get(gh_id)  # KeyError handled by caller
+    relay = RELAYS.get(pid)
+    if relay is not None and getattr(relay, "key", None) == key and relay.port:
+        return relay
+    if relay is not None:
+        relay.stop()
+
+    def resolver():
+        a = store.gh.get(gh_id)
+        ep = a.get("endpoint") or ""
+        if ":" not in ep:
+            raise ConnectionError("tunnel endpoint not ready yet")
+        return ep.rsplit(":", 1)
+
+    relay = ProxyRelay("socks5", "", 0, acc.get("socksUser", ""),
+                       store.gh.socks_password_by_id(gh_id),
+                       resolver=resolver,
+                       preferred_port=int(profile.get("relayPort") or 0)).start()
+    relay.key = key  # type: ignore[attr-defined]
+    RELAYS[pid] = relay
+    # remember the port so the next launch (even after an app restart)
+    # recreates the relay exactly where the browser expects it
+    if store.get(pid) is not None:
+        store.get(pid)["relayPort"] = relay.port
+        store.save()
+    return relay
+
+
 def _ensure_relay(profile_id: str, proxy: dict) -> ProxyRelay:
     """Local SOCKS5 relay carrying this profile's proxy credentials."""
     key = ((proxy.get("protocol") or "http").lower(), proxy.get("host", ""),
@@ -199,7 +234,7 @@ def build_command(profile: dict, data_dir: Path, store) -> tuple[list, str]:
             # auth-extension trick is unreliable. Route through a local
             # no-auth SOCKS5 relay that applies the credentials itself.
             try:
-                relay = _ensure_relay(profile["id"], proxy)
+                relay = _ensure_gh_relay(profile, store)
                 proxy_args.append(f"--proxy-server=socks5://127.0.0.1:{relay.port}")
             except OSError:
                 # Fallback for older/other browsers: per-profile auth extension.

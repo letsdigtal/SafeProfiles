@@ -2,9 +2,17 @@
 
 Chrome 137+ (official branded builds) ignores --load-extension, so the old
 "proxy auth extension" trick no longer works there. This relay listens on
-127.0.0.1 (random port) as a NO-AUTH SOCKS5 server - Chrome connects to it -
-and forwards every connection through the REAL upstream proxy
-(socks5/socks4/http) with the credentials applied locally.
+127.0.0.1 as a NO-AUTH SOCKS5 server - Chrome connects to it - and forwards
+every connection through the REAL upstream proxy (socks5/socks4/http) with
+the credentials applied locally.
+
+v1.2.5: supports DYNAMIC upstreams. Tunnel proxies (GitHub tunnels via
+pinggy.io) change their public address roughly every hour. A relay created
+with a `resolver` callable asks for the current address on every new
+connection and re-resolves + retries when the cached address dies - so an
+open browser window keeps working across address rotations, without restart.
+A `preferred_port` makes the relay port stable per profile, so the browser
+also survives an app restart.
 
 Runs as daemon threads inside the SafeProfiles process; dies with it.
 Source is fully readable - nothing hidden.
@@ -18,27 +26,57 @@ from .proxy_tools import _socks_handshake
 
 
 class ProxyRelay:
-    """start() it, then point Chrome at socks5://127.0.0.1:<relay.port>."""
+    """start() it, then point Chrome at socks5://127.0.0.1:<relay.port>.
 
-    def __init__(self, protocol: str, host: str, port: int,
-                 username: str = "", password: str = ""):
+    Static upstream:  ProxyRelay("socks5", host, port, user, pass)
+    Dynamic upstream: ProxyRelay("socks5", "", 0, user, pass,
+                                 resolver=lambda: (host, port), preferred_port=17642)
+    """
+
+    def __init__(self, protocol: str, host: str = "", port: int = 0,
+                 username: str = "", password: str = "",
+                 resolver=None, preferred_port: int = 0):
         self.protocol = (protocol or "http").lower()
         self.host = host
-        self.port_up = int(port)
+        self.port_up = int(port or 0)
         self.username = username or ""
         self.password = password or ""
+        self.resolver = resolver          # () -> (host, port), for tunnels
+        self.preferred_port = int(preferred_port or 0)
         self.port = 0
+        self._cached_upstream: tuple[str, int] | None = None
         self._srv: socket.socket | None = None
 
     # ---------------- lifecycle ----------------
     def start(self) -> "ProxyRelay":
-        srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        srv.bind(("127.0.0.1", 0))
-        srv.listen(128)
-        srv.settimeout(1.0)  # so stop() can interrupt the accept loop
-        self._srv = srv
-        self.port = srv.getsockname()[1]
+        last_err: OSError | None = None
+        # try the preferred (stable) port a few times - old connections from
+        # a previous relay instance need a moment to fully close
+        if self.preferred_port:
+            ports = [self.preferred_port] * 3 + [0]
+        else:
+            ports = [0]
+        for idx, p in enumerate(ports):
+            if idx and p:
+                import time as _t
+                _t.sleep(0.6)
+            try:
+                srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                srv.bind(("127.0.0.1", p))
+                srv.listen(128)
+                srv.settimeout(1.0)  # so stop() can interrupt the accept loop
+                self._srv = srv
+                self.port = srv.getsockname()[1]
+                break
+            except OSError as e:
+                last_err = e
+                try:
+                    srv.close()
+                except OSError:
+                    pass
+        if self._srv is None:
+            raise last_err or OSError("could not bind relay port")
         threading.Thread(target=self._accept_loop, daemon=True,
                          name=f"sp-relay-{self.port}").start()
         return self
@@ -120,41 +158,61 @@ class ProxyRelay:
                         pass
 
     # ---------------- upstream side (the real proxy, with credentials) ----------------
+    def _current_upstream(self, refresh: bool = False) -> tuple[str, int]:
+        if self.resolver is None:
+            return self.host, self.port_up
+        if refresh or self._cached_upstream is None:
+            h, p = self.resolver()
+            self._cached_upstream = (str(h), int(p))
+        return self._cached_upstream
+
     def _connect_upstream(self, target_host: str, target_port: int) -> socket.socket:
-        s = socket.create_connection((self.host, self.port_up), timeout=20)
-        try:
-            s.settimeout(20)
-            if self.protocol in ("socks4", "socks5"):
-                err = _socks_handshake(s, self.protocol, self.username,
-                                       self.password, target_host, target_port)
-                if err:
-                    raise ConnectionError(err)
-            else:  # http / https upstream -> CONNECT tunnel
-                req = (f"CONNECT {target_host}:{target_port} HTTP/1.1\r\n"
-                       f"Host: {target_host}:{target_port}\r\n")
-                if self.username:
-                    creds = base64.b64encode(
-                        f"{self.username}:{self.password}".encode()).decode()
-                    req += f"Proxy-Authorization: Basic {creds}\r\n"
-                req += "\r\n"
-                s.sendall(req.encode())
-                head = b""
-                while b"\r\n\r\n" not in head and len(head) < 8192:
-                    chunk = s.recv(4096)
-                    if not chunk:
-                        raise ConnectionError("proxy closed during CONNECT")
-                    head += chunk
-                status = head.split(b"\r\n", 1)[0].decode("utf-8", "replace")
-                if " 200 " not in status + " ":
-                    raise ConnectionError(f"proxy refused CONNECT: {status}")
-            s.settimeout(None)
-            return s
-        except Exception:
+        # With a resolver: if the cached (possibly dead) address fails,
+        # re-resolve once and retry - this is what keeps an open browser
+        # alive across tunnel address rotations.
+        attempts = 2 if self.resolver is not None else 1
+        last_err: Exception | None = None
+        for attempt in range(attempts):
             try:
-                s.close()
-            except OSError:
-                pass
-            raise
+                uh, up = self._current_upstream(refresh=(attempt > 0))
+                s = socket.create_connection((uh, up), timeout=20)
+                try:
+                    s.settimeout(20)
+                    if self.protocol in ("socks4", "socks5"):
+                        err = _socks_handshake(s, self.protocol, self.username,
+                                               self.password, target_host, target_port)
+                        if err:
+                            raise ConnectionError(err)
+                    else:  # http / https upstream -> CONNECT tunnel
+                        req = (f"CONNECT {target_host}:{target_port} HTTP/1.1\r\n"
+                               f"Host: {target_host}:{target_port}\r\n")
+                        if self.username:
+                            creds = base64.b64encode(
+                                f"{self.username}:{self.password}".encode()).decode()
+                            req += f"Proxy-Authorization: Basic {creds}\r\n"
+                        req += "\r\n"
+                        s.sendall(req.encode())
+                        head = b""
+                        while b"\r\n\r\n" not in head and len(head) < 8192:
+                            chunk = s.recv(4096)
+                            if not chunk:
+                                raise ConnectionError("proxy closed during CONNECT")
+                            head += chunk
+                        status = head.split(b"\r\n", 1)[0].decode("utf-8", "replace")
+                        if " 200 " not in status + " ":
+                            raise ConnectionError(f"proxy refused CONNECT: {status}")
+                    s.settimeout(None)
+                    return s
+                except Exception:
+                    try:
+                        s.close()
+                    except OSError:
+                        pass
+                    raise
+            except Exception as e:  # noqa: BLE001 - retry with fresh address
+                last_err = e
+                continue
+        raise ConnectionError(f"upstream proxy unreachable: {last_err}")
 
     # ---------------- bidirectional pipe ----------------
     @staticmethod
