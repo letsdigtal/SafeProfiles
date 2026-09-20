@@ -114,6 +114,25 @@ re-starts it automatically (brief gaps possible); if a tunnel dies, press
 **Start** again. For valuable accounts, a direct connection or a real proxy is
 still the better choice.
 
+### 🖥️ Your OWN static-IP proxy (free forever: Oracle Cloud)
+
+The most reliable free proxy is one **you** own — no bans, no rotation, no
+bandwidth cap:
+
+1. Sign up at **oracle.com/cloud/free** (card needed for verification only,
+   **$0 charged** — the "Always Free" tier includes a small 24/7 server).
+2. Create a VM: Ubuntu 22.04, Always Free shape (Ampere A1 / micro).
+3. Copy its public IP, SSH in, and run the one-command installer from this repo:
+   `sudo bash setup_vps_proxy.sh`
+   It installs a password-protected SOCKS5 server (systemd service, survives
+   reboots) and prints the proxy line.
+4. **Oracle console step (important):** Networking → your VCN → Security
+   Lists → Add Ingress Rule → Source `0.0.0.0/0`, TCP, your port.
+5. Paste `socks5://user:pass@SERVER_IP:1080` into SafeProfiles → done.
+   One static IP per channel, forever free.
+
+Later, any $3–5/month VPS works the same way (Hetzner, Racknerd, …).
+
 ## 🕵️ Will Facebook/YouTube detect it?
 
 Honest answer: **no tool is undetectable**, including $100/month ones. What
