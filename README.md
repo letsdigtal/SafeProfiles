@@ -135,6 +135,21 @@ bandwidth cap:
 
 Later, any $3–5/month VPS works the same way (Hetzner, Racknerd, …).
 
+### 🧭 Built-in browser (IMPORTANT for fingerprint protection)
+
+Since Chrome 137, official branded Chrome **ignores `--load-extension`**, so on
+your normal Chrome the fingerprint extension (timezone/canvas/GPU spoof)
+silently never loads — checker sites will show your **real timezone** behind
+the proxy. The fix: **Browsers tab → Download built-in browser** (one-time,
+~170 MB, Google's official Chrome-for-Testing build stored in your data
+folder). Profiles set to browser "Auto" use it first, the UA version stays in
+sync with it, and all fingerprint spoofing works.
+
+**Timezone setup:** in the profile, leave **"Auto — match proxy"** ticked —
+the app tests the proxy at launch and spoofs the proxy's own timezone
+(DST-correct, covers Intl + Date methods). Or pick any of the 600+ zones
+manually.
+
 ## 🕵️ Will Facebook/YouTube detect it?
 
 Honest answer: **no tool is undetectable**, including $100/month ones. What
