@@ -191,7 +191,17 @@ class AppServer:
                                             "running": running_pids(),
                                             "dataDir": str(store.data_dir)})
                 if path == "/api/browsers" and method == "GET":
-                    return self._send_json({"ok": True, "browsers": find_browsers()})
+                    return self._send_json({"ok": True, "browsers": find_browsers(store.data_dir)})
+                if path == "/api/browser" and method == "GET":
+                    from .browser_manager import status as _bstat
+                    return self._send_json({"ok": True, **_bstat(store.data_dir)})
+                if path == "/api/browser/install" and method == "POST":
+                    from .browser_manager import start_install
+                    try:
+                        started = start_install(store.data_dir)
+                    except Exception as e:  # noqa: BLE001
+                        return self._send_json({"ok": False, "error": str(e)}, 400)
+                    return self._send_json({"ok": True, "started": started})
                 if path == "/api/user-agents" and method == "GET":
                     return self._send_json({"ok": True, "presets": list_presets()})
 

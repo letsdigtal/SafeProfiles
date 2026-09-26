@@ -55,6 +55,8 @@ git push -u origin main
 | **Free proxy pool** | Fetch public lists → auto-test → keep working ones → assign to any profile. **$0 forever** |
 | **GitHub tunnels** | Optional: your own throwaway GitHub accounts become free SOCKS5 proxies (one account per profile). Token stored **encrypted**, **never uploaded**; tunnel is password-protected |
 | **Anti-leak flags** | WebRTC IP-leak blocked, `AutomationControlled` blink feature disabled, no automation banners |
+| **Built-in browser** | One-click download of a private Chrome build (Chrome for Testing) inside the app — branded Chrome 137+ ignores fingerprint extensions, the built-in one always loads them (timezone/canvas/GPU spoofing fully active) |
+| **Timezone anti-leak** | Full world timezone list (600+) per profile + **Auto mode**: timezone automatically matches the proxy's own timezone (tested at launch). `Intl`, `Date.toString`, `getTimezoneOffset` (DST-correct) all spoofed consistently |
 | **Automation** | Official-API uploaders/posters (YouTube Data API, FB Graph API) + careful browser fallbacks where the human clicks Publish. See `automation/` |
 | **Safety design** | No telemetry, no auto-update, no remote config; local API token-locked; **never** `--remote-allow-origins=*`; GitHub-token feature (optional) keeps your PAT encrypted and local |
 

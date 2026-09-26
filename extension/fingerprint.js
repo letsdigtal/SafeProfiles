@@ -3,6 +3,11 @@
  * of THIS profile stable + mutually consistent (same canvas seed, same GPU,
  * same timezone as the proxy geo). It does NOT promise invisibility - no
  * software can. Everything is wrapped in try/catch so pages never break.
+ *
+ * v1.3: timezone spoofing hardened - covers Intl.DateTimeFormat (default tz
+ * + resolvedOptions), Date.getTimezoneOffset (correct sign + DST), and
+ * Date.toString/toLocaleString family, so checker sites no longer see the
+ * real timezone behind the proxy.
  */
 (function () {
   'use strict';
@@ -128,28 +133,101 @@
       }
     } catch (e) {}
 
-    // ---- timezone consistency (match your proxy country!) ----
+    // ---- timezone spoofing (match your proxy country!) ----
     if (CFG.timezone) {
       const TZ = CFG.timezone;
       try {
         const OrigDTF = Intl.DateTimeFormat;
-        const fmtForOffset = new OrigDTF('en-US', { timeZone: TZ, hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
-        const utcFmt = new OrigDTF('en-US', { timeZone: 'UTC', hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+        // wall-clock time of a Date inside TZ (handles DST automatically)
+        const partsFmt = new OrigDTF('en-US', { timeZone: TZ, hour12: false,
+          year: 'numeric', month: '2-digit', day: '2-digit',
+          hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        function wall(date) {
+          const p = {};
+          partsFmt.formatToParts(date).forEach(x => { p[x.type] = x.value; });
+          return { y: +p.year, mo: (+p.month) - 1, d: +p.day,
+                   h: (+p.hour) % 24, mi: +p.minute, s: +p.second };
+        }
+        // Real JS semantics: minutes between UTC and local (UTC - local).
+        // Karachi (UTC+5) -> -300, New York winter (UTC-5) -> +300.
         function tzOffsetMinutes(date) {
           try {
-            const tz = new Date(fmtForOffset.format(date));
-            const utc = new Date(utcFmt.format(date));
-            return Math.round((utc - tz) / 60000);
-          } catch (e) { return date.getTimezoneOffset(); }
+            const w = wall(date);
+            const asUTC = Date.UTC(w.y, w.mo, w.d, w.h, w.mi, w.s);
+            return Math.round((date.getTime() - asUTC) / 60000);
+          } catch (e) { return 0; }
         }
+
+        // 1) Date.prototype.getTimezoneOffset
+        Date.prototype.getTimezoneOffset = native(
+          function () { return tzOffsetMinutes(this); }, 'getTimezoneOffset');
+
+        // 2) Intl.DateTimeFormat: default to TZ when the page didn't ask
+        function PatchedDTF(locales, options) {
+          let o = options;
+          try {
+            o = Object.assign({}, options);
+            if (!o.timeZone) o.timeZone = TZ;
+          } catch (e) { /* keep original */ }
+          return new OrigDTF(locales, o);
+        }
+        try { PatchedDTF.prototype = OrigDTF.prototype; } catch (e) {}
+        try { PatchedDTF.supportedLocalesOf = function () {
+          return OrigDTF.supportedLocalesOf.apply(OrigDTF, arguments); }; } catch (e) {}
+        Intl.DateTimeFormat = PatchedDTF;
+
+        // 3) resolvedOptions().timeZone
         const origRO = OrigDTF.prototype.resolvedOptions;
         OrigDTF.prototype.resolvedOptions = native(function () {
           const o = origRO.apply(this, arguments);
-          try { o.timeZone = TZ; } catch (e) {}
+          try { if (o.timeZone) o.timeZone = TZ; } catch (e) {}
           return o;
         }, 'resolvedOptions');
-        const origGTO = Date.prototype.getTimezoneOffset;
-        Date.prototype.getTimezoneOffset = native(function () { return tzOffsetMinutes(this); }, 'getTimezoneOffset');
+
+        // 4) Date string methods (what checker sites display)
+        const abbrFmt = new OrigDTF('en-US', { timeZone: TZ, timeZoneName: 'short' });
+        function tzAbbr(date) {
+          try {
+            const part = abbrFmt.formatToParts(date)
+              .find(p => p.type === 'timeZoneName');
+            return part ? part.value : '';
+          } catch (e) { return ''; }
+        }
+        function fmt(date) {
+          try {
+            const w = wall(date);
+            const p2 = n => String(n).padStart(2, '0');
+            const wd = new OrigDTF('en-US', { timeZone: TZ, weekday: 'short' }).format(date);
+            const mon = new OrigDTF('en-US', { timeZone: TZ, month: 'short' }).format(date);
+            return { w, p2, wd, mon };
+          } catch (e) { return null; }
+        }
+        const origToString = Date.prototype.toString;
+        Date.prototype.toString = native(function () {
+          const f = fmt(this);
+          if (!f) return origToString.call(this);
+          return f.wd + ' ' + f.mon + ' ' + f.p2(f.w.d) + ' ' + f.p2(f.w.h) + ':' +
+                 f.p2(f.w.mi) + ':' + f.p2(f.w.s) + ' ' + tzAbbr(this) + ' ' + f.w.y;
+        }, 'toString');
+        const origTTS = Date.prototype.toTimeString;
+        Date.prototype.toTimeString = native(function () {
+          const f = fmt(this);
+          if (!f) return origTTS.call(this);
+          return f.p2(f.w.h) + ':' + f.p2(f.w.mi) + ':' + f.p2(f.w.s) + ' ' + tzAbbr(this);
+        }, 'toTimeString');
+        Date.prototype.toLocaleString = native(function (l, o) {
+          try { o = Object.assign({}, o); if (!o.timeZone) o.timeZone = TZ; } catch (e) {}
+          return new OrigDTF(l, o).format(this);
+        }, 'toLocaleString');
+        Date.prototype.toLocaleDateString = native(function (l, o) {
+          try { o = Object.assign({}, o); if (!o.timeZone) o.timeZone = TZ; } catch (e) {}
+          return new OrigDTF(l, o).format(this);
+        }, 'toLocaleDateString');
+        Date.prototype.toLocaleTimeString = native(function (l, o) {
+          try { o = Object.assign({}, o); if (!o.timeZone) o.timeZone = TZ; } catch (e) {}
+          return new OrigDTF(l, o).format(this);
+        }, 'toLocaleTimeString');
       } catch (e) {}
     }
 

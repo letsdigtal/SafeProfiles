@@ -16,6 +16,7 @@ import tempfile
 import time
 from pathlib import Path
 
+from .browser_manager import builtin_exe, builtin_version
 from .profiles import resource_path
 from .proxy_tools import format_for_chrome
 from .relay import ProxyRelay
@@ -50,10 +51,24 @@ chrome.webRequest.onAuthRequired.addListener(
 """
 
 
-def find_browsers() -> list:
-    """Detect installed Chromium-based browsers. Returns [{name, path}]."""
+def find_browsers(data_dir=None) -> list:
+    """Detect browsers. The BUILT-IN browser is listed first because it is the
+    only one guaranteed to load the fingerprint extension (Chrome 137+ blocks
+    --load-extension in branded builds, which silently kills timezone/canvas
+    spoofing). Returns [{name, path}]."""
     found: list = []
     seen: set[str] = set()
+    try:
+        if data_dir is None:
+            from .profiles import default_data_dir
+            data_dir = default_data_dir()
+        bexe = builtin_exe(Path(data_dir))
+        if bexe is not None:
+            found.append({"name": "SafeProfiles Browser (built-in)",
+                          "path": str(bexe), "builtin": True})
+            seen.add(str(bexe))
+    except Exception:
+        pass
 
     def add(name: str, path: str | Path | None):
         if not path:
@@ -88,8 +103,8 @@ def find_browsers() -> list:
     return found
 
 
-def resolve_browser(choice: str) -> dict | None:
-    browsers = find_browsers()
+def resolve_browser(choice: str, data_dir=None) -> dict | None:
+    browsers = find_browsers(data_dir)
     if not browsers:
         return None
     if not choice or choice == "auto":
@@ -185,7 +200,7 @@ def _write_fingerprint_ext(profile_dir: Path, profile: dict, preset: dict) -> Pa
     return ext
 
 
-def _verify_tunnel(profile: dict, store, relay: ProxyRelay) -> None:
+def _verify_tunnel(profile: dict, store, relay: ProxyRelay) -> dict:
     """Fail FAST with a clear message if the tunnel is dead, instead of
     launching a browser that later shows 'no network'."""
     from .proxy_tools import test_proxy
@@ -194,7 +209,7 @@ def _verify_tunnel(profile: dict, store, relay: ProxyRelay) -> None:
         if res.get("success"):
             print(f"[tunnel] {profile.get('name', profile['id'])}: exit IP "
                   f"{res.get('ip')} ({res.get('country')})", flush=True)
-            return
+            return res
         if attempt == 1:
             time.sleep(5)  # maybe mid-rotation; let the poller catch up
     reason = res.get("error", "unknown error")
@@ -208,7 +223,7 @@ def _verify_tunnel(profile: dict, store, relay: ProxyRelay) -> None:
 
 def build_command(profile: dict, data_dir: Path, store) -> tuple[list, str]:
     """Returns (argv, profile_dir). Raises RuntimeError if no browser found."""
-    browser = resolve_browser(profile.get("browser", "auto"))
+    browser = resolve_browser(profile.get("browser", "auto"), Path(data_dir))
     if not browser:
         raise RuntimeError("No Chrome/Edge/Brave/Chromium found. Install Google Chrome and try again.")
     preset = get_preset(profile.get("uaPreset", "win_chrome"))
@@ -220,13 +235,21 @@ def build_command(profile: dict, data_dir: Path, store) -> tuple[list, str]:
     vp = profile.get("viewport") or preset["viewport"]
     locale = (profile.get("locale") or "en-US").replace("_", "-")
 
+    # Keep the UA's Chrome version in sync with the BUILT-IN browser's real
+    # version, so UA and client hints never contradict each other.
+    if browser.get("builtin"):
+        bver = builtin_version(Path(data_dir))
+        if bver:
+            import re as _re
+            maj = bver.split(".")[0]
+            ua = _re.sub(r"Chrome/(\d+)(?:\.\d+)*", "Chrome/" + maj + ".0.0.0", ua)
+            ua = _re.sub(r"Edg/(\d+)(?:\.\d+)*", "Edg/" + maj + ".0.0.0", ua)
+
     extensions: list[str] = []
-    fp_ext = _write_fingerprint_ext(profile_dir, profile, preset)
-    if fp_ext:
-        extensions.append(str(fp_ext))
 
     proxy_args: list[str] = []
     proxy_needs_auth_ext = False
+    _tvr = None  # tunnel verify result (carries the exit IP's timezone)
     mode = profile.get("proxyMode", "none")
     proxy: dict = {}
     if mode == "custom":
@@ -259,7 +282,7 @@ def build_command(profile: dict, data_dir: Path, store) -> tuple[list, str]:
                 if mode == "github":
                     relay = _ensure_gh_relay(profile, store)
                     proxy_args.append(f"--proxy-server=socks5://127.0.0.1:{relay.port}")
-                    _verify_tunnel(profile, store, relay)
+                    _tvr = _verify_tunnel(profile, store, relay)
                 else:
                     relay = _ensure_relay(profile["id"], proxy)
                     proxy_args.append(f"--proxy-server=socks5://127.0.0.1:{relay.port}")
@@ -272,6 +295,34 @@ def build_command(profile: dict, data_dir: Path, store) -> tuple[list, str]:
         else:
             proxy_args.append(f"--proxy-server={format_for_chrome(proxy)}")
         proxy_args.append("--disable-quic")  # never let UDP leak around the proxy
+
+    # ---- timezone: "auto" = match the proxy's own timezone ----
+    tz = profile.get("timezone", "") or ""
+    if tz == "auto":
+        tz = ""
+        try:
+            if mode == "pool" and (profile.get("poolProxy") or {}).get("timezone"):
+                tz = profile["poolProxy"]["timezone"]
+            elif mode == "custom":
+                cp = profile.get("customProxy") or {}
+                tz = cp.get("timezone", "")
+                if not tz and cp.get("host"):
+                    from .proxy_tools import test_proxy as _tp
+                    _r = _tp(cp.get("protocol", "http"), cp["host"], int(cp["port"]),
+                             cp.get("username", ""), store.proxy_password(profile),
+                             timeout=12)
+                    if _r.get("success"):
+                        tz = _r.get("timezone", "")
+        except Exception:
+            tz = ""
+    if not tz and mode == "github" and isinstance(_tvr, dict):
+        tz = _tvr.get("timezone", "")
+
+    fp_profile = dict(profile)
+    fp_profile["timezone"] = tz
+    fp_ext = _write_fingerprint_ext(profile_dir, fp_profile, preset)
+    if fp_ext:
+        extensions.append(str(fp_ext))
 
     cmd = [
         browser["path"],

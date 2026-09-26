@@ -127,6 +127,7 @@ class ProfileStore:
                 "host": incoming.get("host", ""),
                 "port": incoming.get("port", ""),
                 "username": incoming.get("username", ""),
+                "timezone": incoming.get("timezone", ""),
                 "passwordEnc": incoming.get("passwordEnc", ""),
             }
         if "newSeed" in fields and fields["newSeed"]:
@@ -150,6 +151,7 @@ class ProfileStore:
             "host": proxy.get("host", ""),
             "port": proxy.get("port", ""),
             "username": proxy.get("username", ""),
+            "timezone": proxy.get("timezone", ""),
             "passwordEnc": self.secrets.encrypt(proxy.get("password", "")) if proxy.get("password") else "",
         }
 

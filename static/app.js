@@ -1,6 +1,6 @@
 /* SafeProfiles dashboard logic. Same-origin only; token required for all API calls. */
 let TOKEN = window.__APP_TOKEN__ || '';
-let PRESETS = [], BROWSERS = [], POOL = [], EDIT_ID = null;
+let PRESETS = [], BROWSERS = [], POOL = [], EDIT_ID = null, testedTZ = null;
 
 async function refreshToken() {
   // Ask the app for its current key and adopt it. This endpoint is only
@@ -133,7 +133,9 @@ async function openModal(p) {
   document.getElementById('fW').value = p?.viewport?.width || preset.viewport?.width || 1280;
   document.getElementById('fH').value = p?.viewport?.height || preset.viewport?.height || 800;
   document.getElementById('fLocale').value = p?.locale || 'en-US';
-  document.getElementById('fTZ').value = p?.timezone || '';
+  document.getElementById('fTZAuto').checked = (p?.timezone === 'auto');
+  document.getElementById('fTZ').value = (p?.timezone && p.timezone !== 'auto') ? p.timezone : '';
+  testedTZ = p?.customProxy?.timezone || null;
   document.getElementById('fURL').value = p?.startUrl || 'about:blank';
   document.querySelectorAll('input[name=pmode]').forEach(r => r.checked = (r.value === (p?.proxyMode || 'none')));
   fillGH(document.getElementById('fGH'), p?.ghAccountId);
@@ -178,7 +180,7 @@ document.getElementById('btnSave').addEventListener('click', async () => {
     isMobile: document.getElementById('fMobile').checked,
     viewport: { width: +document.getElementById('fW').value || 1280, height: +document.getElementById('fH').value || 800 },
     locale: document.getElementById('fLocale').value || 'en-US',
-    timezone: document.getElementById('fTZ').value,
+    timezone: document.getElementById('fTZAuto').checked ? 'auto' : document.getElementById('fTZ').value.trim(),
     startUrl: document.getElementById('fURL').value || 'about:blank',
     proxyMode: mode,
     newSeed: document.getElementById('fSeed').checked,
@@ -191,6 +193,7 @@ document.getElementById('btnSave').addEventListener('click', async () => {
       port: document.getElementById('fPort').value.trim(),
       username: document.getElementById('fUser').value.trim(),
     };
+    body.customProxy.timezone = testedTZ || '';
     if (pass) body.customProxy.password = pass;
     else if (EDIT_ID) body.customProxy.passwordEnc = '***'; // keep stored
   }
@@ -227,6 +230,7 @@ document.getElementById('btnFillTest').addEventListener('click', async () => {
     protocol: document.getElementById('fProto').value, host: document.getElementById('fHost').value,
     port: +document.getElementById('fPort').value, username: document.getElementById('fUser').value,
     password: document.getElementById('fPass').value }) });
+  if (d.ok && d.timezone) testedTZ = d.timezone;
   box.textContent = d.ok ? `OK ✓ ${d.ip} — ${d.city}, ${d.country} — ${d.latencyMs}ms — TZ ${d.timezone}` : 'FAILED: ' + d.error;
 });
 
@@ -338,12 +342,38 @@ document.getElementById('btnGhAdd').addEventListener('click', async (e) => {
 });
 
 // ---- browsers ----
+let BROWSER_POLL = null;
 async function loadBrowsers() {
   const d = await api('/api/browsers');
   document.getElementById('browsers').innerHTML = (d.ok && d.browsers.length)
     ? d.browsers.map(b => `<div class="li"><b>${esc(b.name)}</b><br><code>${esc(b.path)}</code></div>`).join('')
     : '<p>No Chrome/Edge/Brave/Chromium found. Install Google Chrome, then restart.</p>';
+  const b = await api('/api/browser');
+  if (!b.ok) return;
+  const box = document.getElementById('builtinStatus');
+  const btn = document.getElementById('btnBrowserInstall');
+  if (b.installed) {
+    box.textContent = `✅ Installed — Chrome for Testing v${b.version}\nPath: ${b.path}\nAll profiles with browser "Auto" now use it first (fingerprint + timezone spoofing fully active).`;
+    btn.classList.add('hidden');
+    clearInterval(BROWSER_POLL); BROWSER_POLL = null;
+  } else if (b.installing) {
+    box.textContent = `⬇ Downloading… ${Math.round(b.progress)}%  (one-time, ~170 MB — keep the app open)`;
+    btn.disabled = true;
+    if (!BROWSER_POLL) BROWSER_POLL = setInterval(loadBrowsers, 2000);
+  } else {
+    box.textContent = (b.error ? '⚠ Last attempt failed: ' + b.error + '\n' : '') +
+      'Not installed yet. Without it, branded Chrome 137+ ignores the fingerprint extension (timezone/canvas leak).';
+    btn.disabled = false; btn.classList.remove('hidden');
+    clearInterval(BROWSER_POLL); BROWSER_POLL = null;
+  }
 }
+document.getElementById('btnBrowserInstall').addEventListener('click', async () => {
+  const btn = document.getElementById('btnBrowserInstall'); btn.disabled = true;
+  document.getElementById('builtinStatus').textContent = 'Starting download…';
+  const d = await api('/api/browser/install', { method: 'POST' });
+  if (!d.ok) { btn.disabled = false; document.getElementById('builtinStatus').textContent = 'Error: ' + d.error; return; }
+  BROWSER_POLL = setInterval(loadBrowsers, 2000);
+});
 
 // ---- init ----
 (async () => {
