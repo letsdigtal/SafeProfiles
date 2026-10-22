@@ -171,7 +171,8 @@ spam, fake engagement, CAPTCHA-solving services, 50 accounts on one IP. Don't.
 | Dashboard didn't auto-open | Copy the `http://127.0.0.1:…?token=…` URL from the status window into your browser |
 | "Cannot reach SafeProfiles" screen | Means the app is closed - start SafeProfiles.exe. Stale tabs reconnect automatically since v1.2.3 (the dashboard fetches the live key from the app and repairs itself, no reload needed) |
 | Port busy | The app auto-picks ports 17500–17519; close other copies of the app |
-| Fingerprint extension missing in launched window | Newer branded Chrome may ignore `--load-extension`. In the launched window: `chrome://extensions` → Developer mode ON → *Load unpacked* → `…\SafeProfiles\browsers\<profile>\fingerprint_ext` (once; it sticks to that profile). Or use unbranded Chromium |
+| Fingerprint extension missing in launched window | |
+| Browser nags "download Chrome" / is called Chromium | v1.3.1 hides plain Chromium builds entirely. Use the built-in browser (Browsers tab) - if no other browser exists, the app downloads it automatically on start | Newer branded Chrome may ignore `--load-extension`. In the launched window: `chrome://extensions` → Developer mode ON → *Load unpacked* → `…\SafeProfiles\browsers\<profile>\fingerprint_ext` (once; it sticks to that profile). Or use unbranded Chromium |
 | Proxy auth popup appears | Fixed in v1.2: proxy passwords are applied by a local relay inside the app (works even on Chrome 137+). If it still fails, re-test the proxy in the Proxies tab |
 | Free proxies all fail | Normal — public lists decay hourly. Fetch fresh + test again, or browse direct |
 | Tunnel stuck on "starting" | Open that account's repo → Actions tab on github.com and read the run's error; verify the account's email (Actions needs it); press Start again |

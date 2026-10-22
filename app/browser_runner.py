@@ -89,15 +89,11 @@ def find_browsers(data_dir=None) -> list:
         add("Edge", os.path.join(pfx, "Microsoft", "Edge", "Application", "msedge.exe"))
         add("Brave", os.path.join(pf, "BraveSoftware", "Brave-Browser", "Application", "brave.exe"))
         add("Brave", os.path.join(pfx, "BraveSoftware", "Brave-Browser", "Application", "brave.exe"))
-        add("Chromium (Playwright)", os.path.join(lad, "ms-playwright", "chromium-1234", "chrome-win64", "chrome.exe"))
-        # any other playwright chromium build
-        pw = Path(lad) / "ms-playwright" if lad else None
-        if pw and pw.is_dir():
-            for child in pw.glob("chromium-*/chrome-win*/chrome.exe"):
-                add("Chromium (Playwright)", child)
+        # NOTE: plain Chromium / Playwright Chromium builds are deliberately
+        # NOT detected - they nag "download Chrome", lack API keys and break
+        # fingerprint consistency. Use the built-in browser instead.
     else:
-        for name, binary in (("Chrome", "google-chrome"), ("Chromium", "chromium"),
-                             ("Chromium", "chromium-browser"), ("Edge", "microsoft-edge"),
+        for name, binary in (("Chrome", "google-chrome"), ("Edge", "microsoft-edge"),
                              ("Brave", "brave-browser")):
             add(name, shutil.which(binary))
     return found
@@ -225,7 +221,10 @@ def build_command(profile: dict, data_dir: Path, store) -> tuple[list, str]:
     """Returns (argv, profile_dir). Raises RuntimeError if no browser found."""
     browser = resolve_browser(profile.get("browser", "auto"), Path(data_dir))
     if not browser:
-        raise RuntimeError("No Chrome/Edge/Brave/Chromium found. Install Google Chrome and try again.")
+        raise RuntimeError("No usable browser found (plain Chromium is not used - it nags "
+                       "'download Chrome' and breaks fingerprinting). Open the Browsers "
+                       "tab and download the built-in browser (recommended, one-time "
+                       "~170 MB) - or install Google Chrome.")
     preset = get_preset(profile.get("uaPreset", "win_chrome"))
 
     profile_dir = Path(data_dir) / "browsers" / profile["id"]

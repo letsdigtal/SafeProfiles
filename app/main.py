@@ -28,6 +28,21 @@ def main(argv=None) -> int:
     print(f"  Dashboard: {server.base_url}", flush=True)
     print(f"  Data folder: {server.store.data_dir}", flush=True)
     print("  Keep this window open. Press Ctrl+C to quit.", flush=True)
+
+    # v1.3.1: if no usable browser exists, download the built-in one
+    # automatically (one-time) - the user should never end up in Chromium.
+    try:
+        from .browser_runner import find_browsers
+        if not find_browsers(server.store.data_dir):
+            from .browser_manager import start_install
+            print("", flush=True)
+            print("  No Chrome/Edge/Brave found - downloading the SafeProfiles", flush=True)
+            print("  built-in browser now (one-time, ~170 MB). Progress shows in", flush=True)
+            print("  the dashboard's Browsers tab; profiles can launch when it", flush=True)
+            print("  finishes. (Plain Chromium is never used - it is broken.)", flush=True)
+            start_install(server.store.data_dir)
+    except Exception as e:  # noqa: BLE001
+        print(f"  (built-in browser auto-download not started: {e})", flush=True)
     if not args.port and server.port != 17500:
         print("", flush=True)
         print("  NOTE: port 17500 was busy - another SafeProfiles copy may", flush=True)
