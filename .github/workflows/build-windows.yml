@@ -21,11 +21,13 @@ jobs:
           pip install -r requirements.txt pyinstaller
       - name: Build onefile exe
         run: pyinstaller SafeProfiles.spec --noconfirm
+      - name: Version-stamp the exe file name
+        run: Move-Item dist/SafeProfiles.exe "dist/SafeProfiles-v${{ github.ref_name }}.exe"
       - name: Upload exe artifact
         uses: actions/upload-artifact@v4
         with:
           name: SafeProfiles-windows
-          path: dist/SafeProfiles.exe
+          path: dist/SafeProfiles-v*.exe
 
   release:
     needs: build
@@ -41,5 +43,5 @@ jobs:
       - name: Create GitHub Release with exe
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/SafeProfiles.exe
+          files: dist/SafeProfiles-v*.exe
           generate_release_notes: true

@@ -344,6 +344,19 @@ document.getElementById('btnGhAdd').addEventListener('click', async (e) => {
 // ---- browsers ----
 let BROWSER_POLL = null;
 async function loadBrowsers() {
+  api('/api/status').then(s => {
+    const el = document.getElementById('browVer');
+    if (el && s.ok) {
+      el.textContent = 'v' + s.version;
+      const parts = String(s.version).split('.');
+      const v = parseInt(parts[1] || '0', 10), p = parseInt(parts[2] || '0', 10);
+      if (v < 3 || (v === 3 && p < 3)) {
+        el.parentElement.innerHTML = '<b style="color:#f87171">⚠ OLD VERSION (' + s.version +
+          ') — Chromium was removed in v1.3.1+ and the built-in browser became the only one in ' +
+          'v1.3.2. Delete this exe and download the latest SafeProfiles exe from Releases.</b>';
+      }
+    }
+  });
   const d = await api('/api/browsers');
   document.getElementById('browsers').innerHTML = (d.ok && d.browsers.length)
     ? d.browsers.map(b => `<div class="li"><b>${esc(b.name)}</b><br><code>${esc(b.path)}</code></div>`).join('')
