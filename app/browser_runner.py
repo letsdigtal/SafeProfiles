@@ -100,15 +100,16 @@ def find_browsers(data_dir=None) -> list:
 
 
 def resolve_browser(choice: str, data_dir=None) -> dict | None:
-    browsers = find_browsers(data_dir)
-    if not browsers:
-        return None
-    if not choice or choice == "auto":
-        return browsers[0]
-    for b in browsers:
-        if b["path"] == choice or b["name"] == choice:
-            return b
-    return browsers[0]
+    """v1.3.2: profiles ALWAYS launch the app's OWN built-in browser - the
+    system-installed Chrome is never opened (fingerprint protection requires
+    the built-in one, and the user asked for exactly that)."""
+    from .profiles import default_data_dir
+    dd = Path(data_dir) if data_dir else default_data_dir()
+    bexe = builtin_exe(dd)
+    if bexe is not None:
+        return {"name": "SafeProfiles Browser (built-in)", "path": str(bexe),
+                "builtin": True}
+    return None
 
 
 def _write_proxy_auth_ext(profile_dir: Path, username: str, password: str) -> Path:
@@ -221,10 +222,20 @@ def build_command(profile: dict, data_dir: Path, store) -> tuple[list, str]:
     """Returns (argv, profile_dir). Raises RuntimeError if no browser found."""
     browser = resolve_browser(profile.get("browser", "auto"), Path(data_dir))
     if not browser:
-        raise RuntimeError("No usable browser found (plain Chromium is not used - it nags "
-                       "'download Chrome' and breaks fingerprinting). Open the Browsers "
-                       "tab and download the built-in browser (recommended, one-time "
-                       "~170 MB) - or install Google Chrome.")
+        # make sure the one-time download is running, then explain
+        try:
+            from .browser_manager import start_install, status as _bstat
+            st = _bstat(Path(data_dir))
+            if not st["installed"] and not st["installing"]:
+                start_install(Path(data_dir))
+        except Exception:
+            pass
+        raise RuntimeError("The SafeProfiles built-in browser is not ready yet "
+                       "(one-time ~170 MB download - it starts automatically, "
+                       "progress is in the Browsers tab). This app NEVER opens "
+                       "your computer's Chrome for profiles: only its own "
+                       "built-in browser, so fingerprint protection always "
+                       "works. Try again once the download finishes.")
     preset = get_preset(profile.get("uaPreset", "win_chrome"))
 
     profile_dir = Path(data_dir) / "browsers" / profile["id"]

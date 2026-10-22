@@ -97,9 +97,9 @@ window.editP = async (id) => {
 };
 
 function fillBrowsers(sel, val) {
-  sel.innerHTML = '<option value="auto">Auto (first found)</option>' +
-    BROWSERS.map(b => `<option value="${esc(b.path)}">${esc(b.name)}</option>`).join('');
-  if (val) sel.value = val;
+  // v1.3.2: profiles only ever use the app's OWN built-in browser.
+  sel.innerHTML = '<option value="auto">Auto — built-in browser (the app never opens your computer\'s Chrome)</option>';
+  sel.value = 'auto';
 }
 function fillPresets(sel, val) {
   sel.innerHTML = PRESETS.map(p => `<option value="${p.id}">${esc(p.label)}</option>`).join('');
