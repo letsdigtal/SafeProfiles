@@ -22,7 +22,7 @@ jobs:
       - name: Build onefile exe
         run: pyinstaller SafeProfiles.spec --noconfirm
       - name: Version-stamp the exe file name
-        run: Move-Item dist/SafeProfiles.exe "dist/SafeProfiles-v${{ github.ref_name }}.exe"
+        run: Move-Item dist/SafeProfiles.exe "dist/SafeProfiles-${{ github.ref_name }}.exe"
       - name: Upload exe artifact
         uses: actions/upload-artifact@v4
         with:
